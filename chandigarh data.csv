@@ -1,0 +1,9 @@
+name,address,time_window_start,time_window_end
+Warehouse,"Industrial Area Phase 1, Chandigarh, India",9:00 AM,6:00 PM
+Customer A,"Sector 17 Market, Chandigarh, India",10:00 AM,12:00 PM
+Customer B,"Sector 22 Market, Chandigarh, India",1:00 PM,3:00 PM
+Customer C,"Elante Mall, Industrial Area Phase 1, Chandigarh, India",11:00 AM,2:00 PM
+Customer D,"Sukhna Lake, Chandigarh, India",2:00 PM,4:00 PM
+Customer E,"Rock Garden, Sector 1, Chandigarh, India",9:30 AM,11:30 AM
+Customer F,"PGI Hospital, Sector 12, Chandigarh, India",12:00 PM,3:00 PM
+Customer G,"Panjab University, Sector 14, Chandigarh, India",10:30 AM,1:30 PM

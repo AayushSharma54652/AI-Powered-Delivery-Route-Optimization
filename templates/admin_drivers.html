@@ -1,0 +1,267 @@
+{% extends "base.html" %}
+
+{% block title %}Route Optimizer - Manage Drivers{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row mb-4">
+        <div class="col-md-12">
+            <h1>Manage Drivers</h1>
+            <p class="text-muted">Add, edit, and manage your delivery drivers.</p>
+        </div>
+    </div>
+
+    <div class="row">
+        <!-- Driver List -->
+        <div class="col-md-8">
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="card-title mb-0">Drivers</h5>
+                    <span class="badge bg-primary">{{ drivers|length }} Drivers</span>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-striped">
+                            <thead>
+                                <tr>
+                                    <th>Name</th>
+                                    <th>Email</th>
+                                    <th>Phone</th>
+                                    <th>Vehicle</th>
+                                    <th>Status</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for driver in drivers %}
+                                <tr>
+                                    <td>{{ driver.first_name }} {{ driver.last_name }}</td>
+                                    <td>{{ driver.email }}</td>
+                                    <td>{{ driver.phone }}</td>
+                                    <td>
+                                        {% for vehicle in vehicles %}
+                                            {% if vehicle.id == driver.vehicle_id %}
+                                                {{ vehicle.name }} ({{ vehicle.license_plate }})
+                                            {% endif %}
+                                        {% endfor %}
+                                    </td>
+                                    <td>
+                                        {% if driver.is_active %}
+                                            <span class="badge bg-success">Active</span>
+                                        {% else %}
+                                            <span class="badge bg-danger">Inactive</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        <button class="btn btn-sm btn-outline-primary edit-driver-btn" 
+                                                data-bs-toggle="modal" 
+                                                data-bs-target="#editDriverModal" 
+                                                data-driver-id="{{ driver.id }}"
+                                                data-driver-username="{{ driver.username }}"
+                                                data-driver-first-name="{{ driver.first_name }}"
+                                                data-driver-last-name="{{ driver.last_name }}"
+                                                data-driver-email="{{ driver.email }}"
+                                                data-driver-phone="{{ driver.phone }}"
+                                                data-driver-vehicle-id="{{ driver.vehicle_id }}"
+                                                data-driver-is-active="{{ driver.is_active|lower }}">
+                                            <i class="fas fa-edit"></i>
+                                        </button>
+                                        <button class="btn btn-sm btn-outline-danger delete-driver-btn"
+                                                data-bs-toggle="modal"
+                                                data-bs-target="#deleteDriverModal"
+                                                data-driver-id="{{ driver.id }}"
+                                                data-driver-name="{{ driver.first_name }} {{ driver.last_name }}">
+                                            <i class="fas fa-trash"></i>
+                                        </button>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                                {% if drivers|length == 0 %}
+                                <tr>
+                                    <td colspan="6" class="text-center">No drivers found.</td>
+                                </tr>
+                                {% endif %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Add Driver Form -->
+        <div class="col-md-4">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">Add New Driver</h5>
+                </div>
+                <div class="card-body">
+                    <form action="{{ url_for('add_driver') }}" method="post">
+                        <div class="mb-3">
+                            <label for="username" class="form-label">Username</label>
+                            <input type="text" class="form-control" id="username" name="username" required>
+                        </div>
+                        <div class="row mb-3">
+                            <div class="col">
+                                <label for="first_name" class="form-label">First Name</label>
+                                <input type="text" class="form-control" id="first_name" name="first_name" required>
+                            </div>
+                            <div class="col">
+                                <label for="last_name" class="form-label">Last Name</label>
+                                <input type="text" class="form-control" id="last_name" name="last_name" required>
+                            </div>
+                        </div>
+                        <div class="mb-3">
+                            <label for="email" class="form-label">Email</label>
+                            <input type="email" class="form-control" id="email" name="email" required>
+                        </div>
+                        <div class="mb-3">
+                            <label for="phone" class="form-label">Phone</label>
+                            <input type="tel" class="form-control" id="phone" name="phone" required>
+                        </div>
+                        <div class="mb-3">
+                            <label for="password" class="form-label">Password</label>
+                            <input type="password" class="form-control" id="password" name="password" required>
+                        </div>
+                        <div class="mb-3">
+                            <label for="vehicle_id" class="form-label">Assign Vehicle</label>
+                            <select class="form-select" id="vehicle_id" name="vehicle_id">
+                                <option value="">No vehicle</option>
+                                {% for vehicle in vehicles %}
+                                    <option value="{{ vehicle.id }}">{{ vehicle.name }} ({{ vehicle.license_plate }})</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <button type="submit" class="btn btn-primary w-100">
+                            <i class="fas fa-plus-circle me-2"></i>Add Driver
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Edit Driver Modal -->
+<div class="modal fade" id="editDriverModal" tabindex="-1" aria-labelledby="editDriverModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="editDriverModalLabel">Edit Driver</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form action="" method="post" id="edit-driver-form">
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label for="edit_username" class="form-label">Username</label>
+                        <input type="text" class="form-control" id="edit_username" name="username" readonly>
+                    </div>
+                    <div class="row mb-3">
+                        <div class="col">
+                            <label for="edit_first_name" class="form-label">First Name</label>
+                            <input type="text" class="form-control" id="edit_first_name" name="first_name" required>
+                        </div>
+                        <div class="col">
+                            <label for="edit_last_name" class="form-label">Last Name</label>
+                            <input type="text" class="form-control" id="edit_last_name" name="last_name" required>
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label for="edit_email" class="form-label">Email</label>
+                        <input type="email" class="form-control" id="edit_email" name="email" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="edit_phone" class="form-label">Phone</label>
+                        <input type="tel" class="form-control" id="edit_phone" name="phone" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="edit_password" class="form-label">Password (leave blank to keep current)</label>
+                        <input type="password" class="form-control" id="edit_password" name="password">
+                    </div>
+                    <div class="mb-3">
+                        <label for="edit_vehicle_id" class="form-label">Assign Vehicle</label>
+                        <select class="form-select" id="edit_vehicle_id" name="vehicle_id">
+                            <option value="">No vehicle</option>
+                            {% for vehicle in vehicles %}
+                                <option value="{{ vehicle.id }}">{{ vehicle.name }} ({{ vehicle.license_plate }})</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="mb-3 form-check">
+                        <input type="checkbox" class="form-check-input" id="edit_is_active" name="is_active">
+                        <label class="form-check-label" for="edit_is_active">Active</label>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Save Changes</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Delete Driver Modal -->
+<div class="modal fade" id="deleteDriverModal" tabindex="-1" aria-labelledby="deleteDriverModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="deleteDriverModalLabel">Delete Driver</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p>Are you sure you want to delete driver <strong id="delete-driver-name"></strong>?</p>
+                <p>This action cannot be undone.</p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <form action="" method="post" id="delete-driver-form">
+                    <button type="submit" class="btn btn-danger">Delete</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // Edit driver modal functionality
+        const editModal = document.getElementById('editDriverModal');
+        editModal.addEventListener('show.bs.modal', function(event) {
+            const button = event.relatedTarget;
+            const driverId = button.getAttribute('data-driver-id');
+            const username = button.getAttribute('data-driver-username');
+            const firstName = button.getAttribute('data-driver-first-name');
+            const lastName = button.getAttribute('data-driver-last-name');
+            const email = button.getAttribute('data-driver-email');
+            const phone = button.getAttribute('data-driver-phone');
+            const vehicleId = button.getAttribute('data-driver-vehicle-id');
+            const isActive = button.getAttribute('data-driver-is-active') === 'true';
+            
+            const form = document.getElementById('edit-driver-form');
+            form.action = '/admin/drivers/' + driverId + '/edit';
+            
+            document.getElementById('edit_username').value = username;
+            document.getElementById('edit_first_name').value = firstName;
+            document.getElementById('edit_last_name').value = lastName;
+            document.getElementById('edit_email').value = email;
+            document.getElementById('edit_phone').value = phone;
+            document.getElementById('edit_password').value = '';
+            document.getElementById('edit_vehicle_id').value = vehicleId;
+            document.getElementById('edit_is_active').checked = isActive;
+        });
+        
+        // Delete driver modal functionality
+        const deleteModal = document.getElementById('deleteDriverModal');
+        deleteModal.addEventListener('show.bs.modal', function(event) {
+            const button = event.relatedTarget;
+            const driverId = button.getAttribute('data-driver-id');
+            const driverName = button.getAttribute('data-driver-name');
+            
+            document.getElementById('delete-driver-name').textContent = driverName;
+            document.getElementById('delete-driver-form').action = '/admin/drivers/' + driverId + '/delete';
+        });
+    });
+</script>
+{% endblock %}

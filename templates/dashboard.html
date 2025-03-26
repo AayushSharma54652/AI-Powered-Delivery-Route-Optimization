@@ -1,0 +1,378 @@
+{% extends "base.html" %} {% block title %}Route Optimizer - Dashboard{%
+endblock %} {% block content %}
+<div class="container-fluid">
+  <div class="row">
+    <!-- Sidebar -->
+    <div class="col-md-3">
+      <div class="card mb-4">
+        <div class="card-header">
+          <h5 class="card-title mb-0">Add Locations</h5>
+        </div>
+        <div class="card-body">
+          <form action="{{ url_for('add_location') }}" method="post">
+            <div class="mb-3">
+              <label for="name" class="form-label">Name</label>
+              <input
+                type="text"
+                class="form-control"
+                id="name"
+                name="name"
+                required
+              />
+            </div>
+            <div class="mb-3">
+              <label for="address" class="form-label">Address</label>
+              <input
+                type="text"
+                class="form-control"
+                id="address"
+                name="address"
+                required
+              />
+            </div>
+
+            <div class="row">
+              <div class="col">
+                <div class="mb-3">
+                  <label for="time_window_start" class="form-label"
+                    >Start Time</label
+                  >
+                  <div class="input-group">
+                    <input
+                      type="time"
+                      class="form-control"
+                      id="time_window_start"
+                      name="time_window_start"
+                      style="min-width: 100px"
+                    />
+                    <select
+                      class="form-select"
+                      name="time_window_start_ampm"
+                      id="time_window_start_ampm"
+                      style="min-width: 70px; flex: 0 0 auto"
+                    >
+                      <option value="AM">AM</option>
+                      <option value="PM">PM</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+              <div class="col">
+                <div class="mb-3">
+                  <label for="time_window_end" class="form-label"
+                    >End Time</label
+                  >
+                  <div class="input-group">
+                    <input
+                      type="time"
+                      class="form-control"
+                      id="time_window_end"
+                      name="time_window_end"
+                      style="min-width: 100px"
+                    />
+                    <select
+                      class="form-select"
+                      name="time_window_end_ampm"
+                      id="time_window_end_ampm"
+                      style="min-width: 70px; flex: 0 0 auto"
+                    >
+                      <option value="AM">AM</option>
+                      <option value="PM" selected>PM</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <button type="submit" class="btn btn-primary w-100">
+              <i class="fas fa-plus-circle me-2"></i>Add Location
+            </button>
+          </form>
+        </div>
+      </div>
+
+      <div class="card mb-4">
+        <div class="card-header">
+          <h5 class="card-title mb-0">Upload CSV</h5>
+        </div>
+        <div class="card-body">
+          <form
+            action="{{ url_for('upload_csv') }}"
+            method="post"
+            enctype="multipart/form-data"
+          >
+            <div class="mb-3">
+              <label for="file" class="form-label">CSV File</label>
+              <input
+                type="file"
+                class="form-control"
+                id="file"
+                name="file"
+                accept=".csv"
+                required
+              />
+            </div>
+            <button type="submit" class="btn btn-secondary w-100">
+              <i class="fas fa-file-upload me-2"></i>Upload Locations
+            </button>
+          </form>
+          <small class="text-muted mt-2">
+            CSV should have columns: name, address, time_window_start,
+            time_window_end
+          </small>
+          <div class="text-center mt-2">
+            <button
+              onclick="downloadSampleCsv()"
+              class="btn btn-sm btn-outline-secondary"
+            >
+              <i class="fas fa-download me-1"></i>Sample CSV
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div class="card mb-4">
+        <div class="card-header">
+          <h5 class="card-title mb-0">Optimize Route</h5>
+        </div>
+        <div class="card-body">
+          <form action="{{ url_for('optimize_route') }}" method="post">
+            <div class="mb-3">
+              <label for="depot_id" class="form-label">Depot Location</label>
+              <select
+                class="form-select"
+                id="depot_id"
+                name="depot_id"
+                required
+              >
+                <option value="" selected disabled>
+                  Select depot location
+                </option>
+                {% for location in locations %}
+                <option value="{{ location.id }}">{{ location.name }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <div class="mb-3">
+              <label for="vehicle_count" class="form-label"
+                >Number of Vehicles</label
+              >
+              <input
+                type="number"
+                class="form-control"
+                id="vehicle_count"
+                name="vehicle_count"
+                min="1"
+                value="1"
+              />
+            </div>
+            <div class="mb-3">
+              <label for="max_distance" class="form-label"
+                >Max Distance per Vehicle (km)</label
+              >
+              <input
+                type="number"
+                class="form-control"
+                id="max_distance"
+                name="max_distance"
+                step="0.1"
+                min="0"
+              />
+            </div>
+
+            <!-- Traffic option -->
+            <div class="mb-3 form-check">
+              <input
+                type="checkbox"
+                class="form-check-input"
+                id="use_traffic"
+                name="use_traffic"
+                checked
+              />
+              <label class="form-check-label" for="use_traffic">
+                <i class="fas fa-traffic-light me-1"></i>Use real-time traffic
+                data
+              </label>
+              <div class="form-text">
+                Applies traffic patterns to optimize routes
+              </div>
+            </div>
+
+            <!-- Traffic info box -->
+            <div
+              class="traffic-info-box mb-3 p-2 border rounded bg-light"
+              id="traffic-info"
+            >
+              <p class="mb-1 text-muted">
+                <small
+                  ><i class="fas fa-info-circle me-1"></i>Traffic info will be
+                  fetched when you calculate routes</small
+                >
+              </p>
+            </div>
+
+            <button type="submit" class="btn btn-success w-100">
+              <i class="fas fa-magic me-2"></i>Calculate Optimal Routes
+            </button>
+          </form>
+        </div>
+      </div>
+    </div>
+
+    <!-- Main content -->
+    <div class="col-md-9">
+      <div class="card mb-4">
+        <div
+          class="card-header d-flex justify-content-between align-items-center"
+        >
+          <h5 class="card-title mb-0">Delivery Locations</h5>
+          <span class="badge bg-primary">{{ locations|length }} Locations</span>
+        </div>
+        <div class="card-body">
+          <div id="map" style="height: 400px"></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <h5 class="card-title mb-0">Location List</h5>
+        </div>
+        <div class="card-body">
+          <div class="table-responsive">
+            <table class="table table-striped">
+              <thead>
+                <tr>
+                  <th>Name</th>
+                  <th>Address</th>
+                  <th>Time Window</th>
+                  <th>Coordinates</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for location in locations %}
+                <tr>
+                  <td>{{ location.name }}</td>
+                  <td>{{ location.address }}</td>
+                  <td>
+                    {% if location.time_window_start and
+                    location.time_window_end %} {{
+                    location.time_window_start.strftime('%I:%M %p') }} - {{
+                    location.time_window_end.strftime('%I:%M %p') }} {% else %}
+                    Any time {% endif %}
+                  </td>
+                  <td>{{ location.latitude }}, {{ location.longitude }}</td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <div class="card mt-4">
+        <div class="card-header">
+          <h5 class="card-title mb-0">Recent Routes</h5>
+        </div>
+        <div class="card-body">
+          {% if routes %}
+          <div class="list-group">
+            {% for route in routes %}
+            <a
+              href="{{ url_for('view_route', route_id=route.id) }}"
+              class="list-group-item list-group-item-action"
+            >
+              <div class="d-flex w-100 justify-content-between">
+                <h5 class="mb-1">{{ route.name }}</h5>
+                <small
+                  >{{ route.created_at.strftime('%Y-%m-%d %I:%M %p') }}</small
+                >
+              </div>
+              <p class="mb-1">
+                Total Distance: {{ "%.2f"|format(route.total_distance) }} km
+              </p>
+              <small
+                >Total Time: {{ "%.2f"|format(route.total_time) }} hours</small
+              >
+            </a>
+            {% endfor %}
+          </div>
+          {% else %}
+          <p class="text-center text-muted">
+            No routes have been calculated yet.
+          </p>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %} {% block scripts %}
+<script>
+  // Initialize map
+  var map = L.map('map').setView([40.7128, -74.0060], 12);
+
+  // Add OpenStreetMap tiles
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+  }).addTo(map);
+
+  // Add markers for each location
+  var locations = [
+      {% for location in locations %}
+          {
+              id: {{ location.id }},
+              name: "{{ location.name }}",
+              address: "{{ location.address }}",
+              lat: {{ location.latitude }},
+              lng: {{ location.longitude }},
+              timeWindow: "{% if location.time_window_start and location.time_window_end %}{{ location.time_window_start.strftime('%I:%M %p') }} - {{ location.time_window_end.strftime('%I:%M %p') }}{% else %}Any time{% endif %}"
+          },
+      {% endfor %}
+  ];
+
+  var bounds = L.latLngBounds();
+  var markers = [];
+
+  locations.forEach(function(loc) {
+      var marker = L.marker([loc.lat, loc.lng])
+          .addTo(map)
+          .bindPopup(
+              "<strong>" + loc.name + "</strong><br>" +
+              loc.address + "<br>" +
+              "Time Window: " + loc.timeWindow
+          );
+
+      bounds.extend([loc.lat, loc.lng]);
+      markers.push(marker);
+  });
+
+  // If we have locations, fit the map to show all of them
+  if (locations.length > 0) {
+      map.fitBounds(bounds);
+  } else {
+      // Default view if no locations
+      map.setView([40.7128, -74.0060], 10);
+  }
+
+  // Function to download sample CSV
+  function downloadSampleCsv() {
+      const csvContent = 'name,address,time_window_start,time_window_end\n' +
+                       'Warehouse,"123 Main St, New York, NY",8:00 AM,6:00 PM\n' +
+                       'Customer A,"456 Park Ave, New York, NY",9:00 AM,12:00 PM\n' +
+                       'Customer B,"789 Broadway, New York, NY",1:00 PM,4:00 PM\n' +
+                       'Customer C,"101 Wall St, New York, NY",10:00 AM,2:00 PM';
+
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', 'sample_locations.csv');
+      link.style.visibility = 'hidden';
+
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+  }
+</script>
+{% endblock %}

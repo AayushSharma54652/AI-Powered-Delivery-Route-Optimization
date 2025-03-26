@@ -1,0 +1,239 @@
+{% extends "base.html" %}
+
+{% block title %}Route Optimizer - Manage Vehicles{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row mb-4">
+        <div class="col-md-12">
+            <h1>Manage Vehicles</h1>
+            <p class="text-muted">Add, edit, and manage your delivery vehicles.</p>
+        </div>
+    </div>
+
+    <div class="row">
+        <!-- Vehicle List -->
+        <div class="col-md-8">
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="card-title mb-0">Vehicles</h5>
+                    <span class="badge bg-primary">{{ vehicles|length }} Vehicles</span>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-striped">
+                            <thead>
+                                <tr>
+                                    <th>Name</th>
+                                    <th>License Plate</th>
+                                    <th>Type</th>
+                                    <th>Capacity</th>
+                                    <th>Max Weight</th>
+                                    <th>Status</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for vehicle in vehicles %}
+                                <tr>
+                                    <td>{{ vehicle.name }}</td>
+                                    <td>{{ vehicle.license_plate }}</td>
+                                    <td>{{ vehicle.vehicle_type }}</td>
+                                    <td>{{ vehicle.capacity }} m³</td>
+                                    <td>{{ vehicle.max_weight }} kg</td>
+                                    <td>
+                                        {% if vehicle.is_active %}
+                                            <span class="badge bg-success">Active</span>
+                                        {% else %}
+                                            <span class="badge bg-danger">Inactive</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        <button class="btn btn-sm btn-outline-primary edit-vehicle-btn" 
+                                                data-bs-toggle="modal" 
+                                                data-bs-target="#editVehicleModal" 
+                                                data-vehicle-id="{{ vehicle.id }}"
+                                                data-vehicle-name="{{ vehicle.name }}"
+                                                data-vehicle-license="{{ vehicle.license_plate }}"
+                                                data-vehicle-type="{{ vehicle.vehicle_type }}"
+                                                data-vehicle-capacity="{{ vehicle.capacity }}"
+                                                data-vehicle-weight="{{ vehicle.max_weight }}"
+                                                data-vehicle-is-active="{{ vehicle.is_active|lower }}">
+                                            <i class="fas fa-edit"></i>
+                                        </button>
+                                        <button class="btn btn-sm btn-outline-danger delete-vehicle-btn"
+                                                data-bs-toggle="modal"
+                                                data-bs-target="#deleteVehicleModal"
+                                                data-vehicle-id="{{ vehicle.id }}"
+                                                data-vehicle-name="{{ vehicle.name }}">
+                                            <i class="fas fa-trash"></i>
+                                        </button>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                                {% if vehicles|length == 0 %}
+                                <tr>
+                                    <td colspan="7" class="text-center">No vehicles found.</td>
+                                </tr>
+                                {% endif %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Add Vehicle Form -->
+        <div class="col-md-4">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">Add New Vehicle</h5>
+                </div>
+                <div class="card-body">
+                    <form action="{{ url_for('add_vehicle') }}" method="post">
+                        <div class="mb-3">
+                            <label for="name" class="form-label">Vehicle Name</label>
+                            <input type="text" class="form-control" id="name" name="name" required>
+                        </div>
+                        <div class="mb-3">
+                            <label for="license_plate" class="form-label">License Plate</label>
+                            <input type="text" class="form-control" id="license_plate" name="license_plate" required>
+                        </div>
+                        <div class="mb-3">
+                            <label for="vehicle_type" class="form-label">Vehicle Type</label>
+                            <select class="form-select" id="vehicle_type" name="vehicle_type" required>
+                                <option value="Car">Car</option>
+                                <option value="Van">Van</option>
+                                <option value="Truck">Truck</option>
+                                <option value="Motorbike">Motorbike</option>
+                            </select>
+                        </div>
+                        <div class="mb-3">
+                            <label for="capacity" class="form-label">Capacity (m³)</label>
+                            <input type="number" class="form-control" id="capacity" name="capacity" step="0.1" min="0.1" required>
+                        </div>
+                        <div class="mb-3">
+                            <label for="max_weight" class="form-label">Max Weight (kg)</label>
+                            <input type="number" class="form-control" id="max_weight" name="max_weight" step="0.1" min="0.1" required>
+                        </div>
+                        <button type="submit" class="btn btn-primary w-100">
+                            <i class="fas fa-plus-circle me-2"></i>Add Vehicle
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Edit Vehicle Modal -->
+<div class="modal fade" id="editVehicleModal" tabindex="-1" aria-labelledby="editVehicleModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="editVehicleModalLabel">Edit Vehicle</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form action="" method="post" id="edit-vehicle-form">
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label for="edit_name" class="form-label">Vehicle Name</label>
+                        <input type="text" class="form-control" id="edit_name" name="name" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="edit_license_plate" class="form-label">License Plate</label>
+                        <input type="text" class="form-control" id="edit_license_plate" name="license_plate" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="edit_vehicle_type" class="form-label">Vehicle Type</label>
+                        <select class="form-select" id="edit_vehicle_type" name="vehicle_type" required>
+                            <option value="Car">Car</option>
+                            <option value="Van">Van</option>
+                            <option value="Truck">Truck</option>
+                            <option value="Motorbike">Motorbike</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label for="edit_capacity" class="form-label">Capacity (m³)</label>
+                        <input type="number" class="form-control" id="edit_capacity" name="capacity" step="0.1" min="0.1" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="edit_max_weight" class="form-label">Max Weight (kg)</label>
+                        <input type="number" class="form-control" id="edit_max_weight" name="max_weight" step="0.1" min="0.1" required>
+                    </div>
+                    <div class="mb-3 form-check">
+                        <input type="checkbox" class="form-check-input" id="edit_is_active" name="is_active">
+                        <label class="form-check-label" for="edit_is_active">Active</label>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Save Changes</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Delete Vehicle Modal -->
+<div class="modal fade" id="deleteVehicleModal" tabindex="-1" aria-labelledby="deleteVehicleModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="deleteVehicleModalLabel">Delete Vehicle</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p>Are you sure you want to delete <strong id="delete-vehicle-name"></strong>?</p>
+                <p class="text-danger">This will remove all driver assignments to this vehicle.</p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <form action="" method="post" id="delete-vehicle-form">
+                    <button type="submit" class="btn btn-danger">Delete</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // Edit vehicle modal functionality
+        const editModal = document.getElementById('editVehicleModal');
+        editModal.addEventListener('show.bs.modal', function(event) {
+            const button = event.relatedTarget;
+            const vehicleId = button.getAttribute('data-vehicle-id');
+            const name = button.getAttribute('data-vehicle-name');
+            const license = button.getAttribute('data-vehicle-license');
+            const type = button.getAttribute('data-vehicle-type');
+            const capacity = button.getAttribute('data-vehicle-capacity');
+            const weight = button.getAttribute('data-vehicle-weight');
+            const isActive = button.getAttribute('data-vehicle-is-active') === 'true';
+            
+            const form = document.getElementById('edit-vehicle-form');
+            form.action = '/admin/vehicles/' + vehicleId + '/edit';
+            
+            document.getElementById('edit_name').value = name;
+            document.getElementById('edit_license_plate').value = license;
+            document.getElementById('edit_vehicle_type').value = type;
+            document.getElementById('edit_capacity').value = capacity;
+            document.getElementById('edit_max_weight').value = weight;
+            document.getElementById('edit_is_active').checked = isActive;
+        });
+        
+        // Delete vehicle modal functionality
+        const deleteModal = document.getElementById('deleteVehicleModal');
+        deleteModal.addEventListener('show.bs.modal', function(event) {
+            const button = event.relatedTarget;
+            const vehicleId = button.getAttribute('data-vehicle-id');
+            const vehicleName = button.getAttribute('data-vehicle-name');
+            
+            document.getElementById('delete-vehicle-name').textContent = vehicleName;
+            document.getElementById('delete-vehicle-form').action = '/admin/vehicles/' + vehicleId + '/delete';
+        });
+    });
+</script>
+{% endblock %}
