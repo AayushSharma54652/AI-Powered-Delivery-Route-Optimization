@@ -1,5 +1,8 @@
-{% extends "base.html" %} {% block title %}Route Optimizer - Dashboard{%
-endblock %} {% block content %}
+{% extends "base.html" %}
+
+{% block title %}Route Optimizer - Dashboard{% endblock %}
+
+{% block content %}
 <div class="container-fluid">
   <div class="row">
     <!-- Sidebar -->
@@ -136,7 +139,7 @@ endblock %} {% block content %}
           <h5 class="card-title mb-0">Optimize Route</h5>
         </div>
         <div class="card-body">
-          <form action="{{ url_for('optimize_route') }}" method="post">
+          <form action="{{ url_for('optimize_route_fuel_efficient') }}" method="post">
             <div class="mb-3">
               <label for="depot_id" class="form-label">Depot Location</label>
               <select
@@ -180,6 +183,19 @@ endblock %} {% block content %}
               />
             </div>
 
+            <!-- Optimization Objective field -->
+            <div class="mb-3">
+                <label for="optimization_objective" class="form-label">
+                    <i class="fas fa-balance-scale me-1"></i>Optimization Objective
+                </label>
+                <select class="form-select" id="optimization_objective" name="optimization_objective">
+                    <option value="balanced" selected>Balanced (Time & Fuel)</option>
+                    <option value="time">Fastest Delivery Time</option>
+                    <option value="fuel">Minimum Fuel Consumption</option>
+                </select>
+                <div class="form-text">Choose what to prioritize when calculating routes</div>
+            </div>
+
             <!-- Traffic option -->
             <div class="mb-3 form-check">
               <input
@@ -198,6 +214,54 @@ endblock %} {% block content %}
               </div>
             </div>
 
+            <!-- Vehicle selection -->
+            <div class="mb-3">
+                <label class="form-label">Vehicle Selection</label>
+                <div class="vehicle-list">
+                    {% for i in range(vehicle_count|default(1, true)) %}
+                    <div class="vehicle-item mb-2">
+                        <div class="input-group">
+                            <span class="input-group-text">Vehicle {{ i+1 }}</span>
+                            <select class="form-select vehicle-type-select" name="vehicle_type_{{ i }}">
+                                <option value="van" selected>Delivery Van</option>
+                                <option value="car">Car</option>
+                                <option value="truck">Truck</option>
+                                <option value="motorbike">Motorbike</option>
+                            </select>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+
+            <!-- Fuel savings estimator section -->
+            <div class="fuel-savings-box mb-3 p-2 border rounded bg-light">
+                <div class="d-flex align-items-center mb-2">
+                    <i class="fas fa-gas-pump text-success me-2"></i>
+                    <h6 class="mb-0">Estimated Fuel Savings</h6>
+                </div>
+                <div class="row text-center">
+                    <div class="col">
+                        <small class="text-muted">Distance</small>
+                        <p class="mb-0 fw-bold" id="estimated-distance">0 km</p>
+                    </div>
+                    <div class="col">
+                        <small class="text-muted">Fuel</small>
+                        <p class="mb-0 fw-bold" id="estimated-fuel">0 L</p>
+                    </div>
+                    <div class="col">
+                        <small class="text-muted">CO₂ Saved</small>
+                        <p class="mb-0 fw-bold" id="estimated-co2">0 kg</p>
+                    </div>
+                </div>
+                <div class="progress mt-2" style="height: 5px;">
+                    <div class="progress-bar bg-success" role="progressbar" style="width: 0%"></div>
+                </div>
+                <small class="text-muted d-block mt-1 text-center">
+                    Estimates are calculated based on vehicle type, distance, and traffic
+                </small>
+            </div>
+
             <!-- Traffic info box -->
             <div
               class="traffic-info-box mb-3 p-2 border rounded bg-light"
@@ -212,7 +276,7 @@ endblock %} {% block content %}
             </div>
 
             <button type="submit" class="btn btn-success w-100">
-              <i class="fas fa-magic me-2"></i>Calculate Optimal Routes
+              <i class="fas fa-leaf me-2"></i>Calculate Fuel-Efficient Routes
             </button>
           </form>
         </div>
@@ -290,9 +354,15 @@ endblock %} {% block content %}
               <p class="mb-1">
                 Total Distance: {{ "%.2f"|format(route.total_distance) }} km
               </p>
-              <small
-                >Total Time: {{ "%.2f"|format(route.total_time) }} hours</small
-              >
+              <div class="d-flex justify-content-between">
+                <small>Total Time: {{ "%.2f"|format(route.total_time) }} hours</small>
+                {% if route.fuel_saved %}
+                <span class="badge bg-success">
+                  <i class="fas fa-gas-pump me-1"></i>
+                  {{ "%.2f"|format(route.fuel_saved) }} L fuel saved
+                </span>
+                {% endif %}
+              </div>
             </a>
             {% endfor %}
           </div>
@@ -306,7 +376,9 @@ endblock %} {% block content %}
     </div>
   </div>
 </div>
-{% endblock %} {% block scripts %}
+{% endblock %}
+
+{% block scripts %}
 <script>
   // Initialize map
   var map = L.map('map').setView([40.7128, -74.0060], 12);
@@ -374,5 +446,125 @@ endblock %} {% block content %}
       link.click();
       document.body.removeChild(link);
   }
+
+  // Make updateFuelEstimates function globally accessible
+  window.updateFuelEstimates = function() {
+      const vehicleCount = parseInt(document.getElementById('vehicle_count').value) || 1;
+      const maxDistance = parseFloat(document.getElementById('max_distance').value) || 100;
+      const optimization = document.getElementById('optimization_objective').value;
+      
+      // Get selected vehicle types
+      const vehicleTypes = [];
+      document.querySelectorAll('.vehicle-type-select').forEach(select => {
+          vehicleTypes.push(select.value);
+      });
+      
+      // Base fuel consumption per vehicle type (L/100km)
+      const fuelRates = {
+          'car': 7,
+          'van': 10,
+          'truck': 20,
+          'motorbike': 4
+      };
+      
+      // Calculate estimated total distance
+      let estimatedDistance = maxDistance * vehicleCount;
+      
+      // Calculate estimated fuel consumption
+      let totalFuel = 0;
+      vehicleTypes.forEach(type => {
+          const rate = fuelRates[type] || 10;
+          totalFuel += (maxDistance * rate / 100);
+      });
+      
+      // Calculate fuel savings
+      let fuelSavings = 0;
+      if (optimization === 'fuel') {
+          fuelSavings = totalFuel * 0.2; // 20% savings with fuel optimization
+      } else if (optimization === 'balanced') {
+          fuelSavings = totalFuel * 0.1; // 10% savings with balanced optimization
+      } else {
+          fuelSavings = totalFuel * 0.05; // 5% savings with time optimization
+      }
+      
+      // Calculate CO2 savings (2.68 kg CO2 per liter of diesel)
+      const co2Savings = fuelSavings * 2.68;
+      
+      // Update the UI
+      document.getElementById('estimated-distance').textContent = estimatedDistance.toFixed(1) + ' km';
+      document.getElementById('estimated-fuel').textContent = fuelSavings.toFixed(1) + ' L';
+      document.getElementById('estimated-co2').textContent = co2Savings.toFixed(1) + ' kg';
+      
+      // Update progress bar (max 20% savings)
+      const savingsPercent = (fuelSavings / totalFuel) * 100;
+      document.querySelector('.progress-bar').style.width = savingsPercent + '%';
+  };
+
+  // Function to update vehicle selection based on count
+  function updateVehicleSelection() {
+      const count = parseInt(document.getElementById('vehicle_count').value) || 1;
+      const vehicleList = document.querySelector('.vehicle-list');
+      
+      // Clear existing vehicle items
+      vehicleList.innerHTML = '';
+      
+      // Create new vehicle items
+      for (let i = 0; i < count; i++) {
+          const vehicleItem = document.createElement('div');
+          vehicleItem.className = 'vehicle-item mb-2';
+          vehicleItem.innerHTML = `
+              <div class="input-group">
+                  <span class="input-group-text">Vehicle ${i+1}</span>
+                  <select class="form-select vehicle-type-select" name="vehicle_type_${i}">
+                      <option value="van" selected>Delivery Van</option>
+                      <option value="car">Car</option>
+                      <option value="truck">Truck</option>
+                      <option value="motorbike">Motorbike</option>
+                  </select>
+              </div>
+          `;
+          vehicleList.appendChild(vehicleItem);
+      }
+      
+      // Add event listeners to new selects
+      addVehicleSelectListeners();
+      
+      // Update estimates after changing vehicle count
+      updateFuelEstimates();
+  }
+
+  // Function to add event listeners to vehicle type selects
+  function addVehicleSelectListeners() {
+      document.querySelectorAll('.vehicle-type-select').forEach(select => {
+          select.removeEventListener('change', window.updateFuelEstimates);
+          select.addEventListener('change', window.updateFuelEstimates);
+      });
+  }
+
+  // Initialize when DOM is loaded
+  document.addEventListener('DOMContentLoaded', function() {
+      // Add event listeners to form fields
+      const vehicleCountInput = document.getElementById('vehicle_count');
+      const optimizationSelect = document.getElementById('optimization_objective');
+      const maxDistanceInput = document.getElementById('max_distance');
+      
+      if (vehicleCountInput) {
+          vehicleCountInput.addEventListener('change', updateVehicleSelection);
+      }
+      
+      if (optimizationSelect) {
+          optimizationSelect.addEventListener('change', window.updateFuelEstimates);
+      }
+      
+      if (maxDistanceInput) {
+          maxDistanceInput.addEventListener('input', window.updateFuelEstimates);
+      }
+      
+      // Add listeners to initial vehicle selects
+      addVehicleSelectListeners();
+      
+      // Initialize estimates
+      window.updateFuelEstimates();
+  });
 </script>
 {% endblock %}

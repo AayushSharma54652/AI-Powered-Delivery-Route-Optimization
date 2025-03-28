@@ -755,7 +755,18 @@ document.addEventListener('DOMContentLoaded', function() {
     }
     
     // Function to complete route
+// Function to complete route - Modified to work with the fuel form modal
     function completeRoute() {
+        // Only directly complete the route if we're not showing the fuel form
+        if (!document.getElementById('completeRouteModal').classList.contains('show')) {
+            // If the modal isn't showing, proceed with direct route completion
+            updateRouteStatus('completed');
+        }
+        // If the modal is showing, the submitRouteCompletion button handler will handle the completion
+    }
+
+    // New function to update route status (extracted from previous completeRoute function)
+    function updateRouteStatus(status) {
         fetch(`/driver/routes/${routeId}/status`, {
             method: 'PUT',
             headers: {
@@ -763,7 +774,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 'Content-Type': 'application/json'
             },
             body: JSON.stringify({
-                status: 'completed'
+                status: status
             })
         })
         .then(response => {
@@ -922,6 +933,7 @@ document.addEventListener('DOMContentLoaded', function() {
     }
     
     // Handle complete route button
+
     function setupCompleteRouteButton() {
         document.getElementById('complete-route-btn').addEventListener('click', () => {
             // Check if all stops are completed
@@ -931,11 +943,12 @@ document.addEventListener('DOMContentLoaded', function() {
                 if (!confirm(`There are still ${pendingStops.length} uncompleted stops. Are you sure you want to complete the route?`)) {
                     return;
                 }
-            } else if (!confirm('Are you sure you want to mark this route as completed?')) {
-                return;
             }
             
-            completeRoute();
+            // Instead of directly completing the route, show the fuel form modal
+            // The modal's submit button will handle the actual completion
+            const modal = new bootstrap.Modal(document.getElementById('completeRouteModal'));
+            modal.show();
         });
     }
     

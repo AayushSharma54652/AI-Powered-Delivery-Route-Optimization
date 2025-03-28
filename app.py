@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, jsonify, redirect, url_for, flash, make_response, send_from_directory
+from flask import Flask, render_template, request, jsonify, redirect, url_for, flash, make_response, send_from_directory, logging
 from werkzeug.security import generate_password_hash, check_password_hash
 from functools import wraps
 import jwt
@@ -6,7 +6,6 @@ from flask_sqlalchemy import SQLAlchemy
 import os
 import json
 from datetime import datetime, timedelta
-
 # Custom modules
 from models.route_optimizer import optimize_routes
 from models.time_predictor import predict_travel_time
@@ -16,6 +15,9 @@ from utils.distance_matrix import calculate_distance_matrix
 from utils.data_processing import process_csv_data
 from models.traffic_optimizer import optimize_routes_with_traffic
 from models.traffic_data import get_overpass_traffic_data
+from models.fuel_efficient_optimizer import optimize_routes_fuel_efficient
+from models.vehicle_model import get_vehicle_efficiency_data, calculate_co2_emissions
+
 
 data_dir = os.path.join(os.path.dirname(__file__), 'data')
 if not os.path.exists(data_dir):
@@ -26,6 +28,12 @@ app.config['SECRET_KEY'] = 'your-secret-key-goes-here'
 app.config['JWT_SECRET_KEY'] = 'your-jwt-secret-key-here'  
 app.config['SQLALCHEMY_DATABASE_URI'] = f'sqlite:///{os.path.join(data_dir, "locations.db")}'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+
+# Setup logging
+logging.basicConfig(level=logging.INFO, 
+                   format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
+
 
 db = SQLAlchemy(app)
 
@@ -49,13 +57,36 @@ def token_required(f):
             return jsonify({'message': 'Token is missing!'}), 401
         
         try:
+            # Decode the token
             data = jwt.decode(token, app.config['JWT_SECRET_KEY'], algorithms=["HS256"])
+            
+            # Check if token is expired
+            exp_timestamp = data.get('exp', 0)
+            if datetime.utcnow().timestamp() > exp_timestamp:
+                return jsonify({'message': 'Token has expired! Please login again.'}), 401
+            
+            # Get the driver from database
             current_driver = Driver.query.filter_by(id=data['id']).first()
-        except:
-            return jsonify({'message': 'Token is invalid!'}), 401
+            
+            # Check if driver exists
+            if not current_driver:
+                return jsonify({'message': 'Driver not found! User may have been deleted.'}), 401
+                
+            # Check if driver is active
+            if not current_driver.is_active:
+                return jsonify({'message': 'Driver account is inactive!'}), 403
+                
+        except jwt.ExpiredSignatureError:
+            return jsonify({'message': 'Token has expired! Please login again.'}), 401
+        except jwt.InvalidTokenError:
+            return jsonify({'message': 'Invalid token! Please login again.'}), 401
+        except Exception as e:
+            return jsonify({'message': f'Error processing token: {str(e)}'}), 401
             
         return f(current_driver, *args, **kwargs)
+    
     return decorated
+
 
 # Database models
 class Location(db.Model):
@@ -75,10 +106,15 @@ class Route(db.Model):
     total_distance = db.Column(db.Float, nullable=False)
     total_time = db.Column(db.Float, nullable=False)
     route_data = db.Column(db.Text, nullable=False)  
-    traffic_data = db.Column(db.Text, nullable=True)  
+    traffic_data = db.Column(db.Text, nullable=True)
 
-
-# Add to your existing models in app.py
+    total_fuel = db.Column(db.Float, nullable=True)  
+    fuel_saved = db.Column(db.Float, nullable=True)  
+    co2_saved = db.Column(db.Float, nullable=True)  
+    optimization_type = db.Column(db.String(20), nullable=True)  
+    actual_fuel = db.Column(db.Float, nullable=True) 
+    fuel_accuracy = db.Column(db.Float, nullable=True) 
+    
 
 class Driver(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -98,6 +134,9 @@ class Driver(db.Model):
     
     # Relationship with vehicle
     vehicle = db.relationship('Vehicle', back_populates='drivers')
+    fuel_efficiency_rating = db.Column(db.Float, nullable=True)  # Efficiency rating (lower is better)
+    fuel_saved = db.Column(db.Float, nullable=True)  # Total fuel saved in liters
+    routes_completed = db.Column(db.Integer, nullable=True)  # Count of completed routes
     
     def set_password(self, password):
         self.password_hash = generate_password_hash(password)
@@ -115,8 +154,12 @@ class Driver(db.Model):
             'phone': self.phone,
             'vehicle_id': self.vehicle_id,
             'is_active': self.is_active,
-            'last_login': self.last_login.isoformat() if self.last_login else None
+            'last_login': self.last_login.isoformat() if self.last_login else None,
+            'fuel_efficiency_rating': self.fuel_efficiency_rating,
+            'fuel_saved': self.fuel_saved,
+            'routes_completed': self.routes_completed
         }
+
 
 class Vehicle(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -130,6 +173,9 @@ class Vehicle(db.Model):
     
     # Relationship with drivers
     drivers = db.relationship('Driver', back_populates='vehicle')
+    fuel_consumption = db.Column(db.Float, nullable=True) 
+    weight = db.Column(db.Float, nullable=True)          
+    fuel_type = db.Column(db.String(20), default='diesel')  
     
     def to_dict(self):
         return {
@@ -998,6 +1044,287 @@ def delivery_proof(current_driver, filename):
         return "Unauthorized", 403
     
     return send_from_directory(os.path.join(app.root_path, 'static', 'proofs'), filename)
+
+
+# Add these imports to the top of app.py
+from models.fuel_efficient_optimizer import optimize_routes_fuel_efficient
+from models.vehicle_model import get_vehicle_efficiency_data, calculate_co2_emissions
+
+# Add this new route to app.py
+@app.route('/optimize_route_fuel_efficient', methods=['POST'])
+def optimize_route_fuel_efficient():
+    """
+    Optimize delivery routes with emphasis on fuel efficiency.
+    """
+    # Get form data
+    depot_id = request.form.get('depot_id', type=int)
+    vehicle_count = request.form.get('vehicle_count', type=int, default=1)
+    max_distance = request.form.get('max_distance', type=float, default=None)
+    optimization_objective = request.form.get('optimization_objective', default='balanced')
+    
+    # Optional parameters for vehicle selection
+    vehicle_ids = request.form.getlist('vehicle_ids')
+    
+    # Get all locations
+    locations = Location.query.all()
+    
+    # Find depot location
+    depot = None
+    delivery_locations = []
+    
+    for loc in locations:
+        if loc.id == depot_id:
+            depot = {
+                'id': loc.id,
+                'name': loc.name,
+                'latitude': loc.latitude,
+                'longitude': loc.longitude
+            }
+        else:
+            delivery_locations.append({
+                'id': loc.id,
+                'name': loc.name,
+                'latitude': loc.latitude,
+                'longitude': loc.longitude,
+                'time_window_start': loc.time_window_start.strftime('%H:%M') if loc.time_window_start else None,
+                'time_window_end': loc.time_window_end.strftime('%H:%M') if loc.time_window_end else None
+            })
+    
+    if not depot:
+        return "Depot location not found", 400
+    
+    # Calculate distance matrix
+    coordinates = [{'lat': loc['latitude'], 'lng': loc['longitude']} for loc in [depot] + delivery_locations]
+    distance_matrix = calculate_distance_matrix(coordinates)
+    
+    # Get traffic data if enabled
+    use_traffic = request.form.get('use_traffic', default='on') == 'on'
+    traffic_data = None
+    
+    if use_traffic:
+        # Get bounds from coordinates
+        min_lat = min(coord['lat'] for coord in coordinates)
+        min_lon = min(coord['lng'] for coord in coordinates)
+        max_lat = max(coord['lat'] for coord in coordinates)
+        max_lon = max(coord['lng'] for coord in coordinates)
+        
+        bounds = (min_lat, min_lon, max_lat, max_lon)
+        traffic_data = get_overpass_traffic_data(bounds)
+    
+    # Get vehicle data
+    vehicle_data = []
+    
+    if vehicle_ids:
+        # If specific vehicles are selected, use their data
+        for v_id in vehicle_ids:
+            vehicle_data.append(get_vehicle_efficiency_data(vehicle_id=int(v_id), db=db))
+    else:
+        # Otherwise use default vehicles
+        for i in range(vehicle_count):
+            vehicle_type = request.form.get(f'vehicle_type_{i}', default='van')
+            vehicle_data.append(get_vehicle_efficiency_data(vehicle_type=vehicle_type))
+    
+    # Optional: Cluster locations if there are multiple vehicles
+    clusters = None
+    if vehicle_count > 1:
+        clusters = cluster_locations([depot] + delivery_locations, vehicle_count)
+    
+    # Optimize routes with fuel efficiency
+    routes = optimize_routes_fuel_efficient(
+        depot=depot,
+        locations=delivery_locations,
+        distance_matrix=distance_matrix,
+        vehicle_data=vehicle_data,
+        traffic_data=traffic_data,
+        vehicle_count=vehicle_count,
+        max_distance=max_distance,
+        clusters=clusters,
+        optimization_objective=optimization_objective
+    )
+    
+    # Calculate total metrics
+    total_distance = sum(route['total_distance'] for route in routes)
+    total_time = sum(route['total_time'] for route in routes)
+    total_fuel = sum(route['total_fuel'] for route in routes)
+    total_fuel_saved = sum(route['fuel_saved'] for route in routes)
+    
+    # Calculate CO2 savings
+    co2_saved = calculate_co2_emissions(total_fuel_saved)
+    
+    # Generate a formatted route name
+    route_name = f"Fuel-Efficient Route {datetime.now().strftime('%Y-%m-%d %H:%M')}"
+    
+    # Save route to database
+    new_route = Route(
+        name=route_name,
+        total_distance=total_distance,
+        total_time=total_time,
+        route_data=json.dumps(routes),
+        traffic_data=json.dumps(traffic_data) if traffic_data else "{}"
+    )
+    
+    # Add fuel information to route (may need to extend your Route model)
+    new_route.total_fuel = total_fuel
+    new_route.fuel_saved = total_fuel_saved
+    new_route.co2_saved = co2_saved
+    
+    db.session.add(new_route)
+    db.session.commit()
+
+    print("FUEL-EFFICIENT ROUTE DATA:", routes)
+    for route in routes:
+        print(f"Vehicle {route['vehicle_id']} ({route['vehicle_type']}) has {len(route['stops'])} stops")
+        print(f"  - Total Distance: {route['total_distance']:.2f} km")
+        print(f"  - Total Time: {route['total_time']:.2f} hours")
+        print(f"  - Total Fuel: {route['total_fuel']:.2f} liters")
+        print(f"  - Fuel Saved: {route['fuel_saved']:.2f} liters")
+        print(f"  - Cost Saved: ${route['cost_saved']:.2f}")
+    
+    # Redirect to the route details page
+    return redirect(url_for('view_route', route_id=new_route.id))
+
+# Add this endpoint to your app.py file
+
+@app.route('/api/routes/<int:route_id>/complete', methods=['POST'])
+@token_required  # If using driver authentication
+def complete_route(current_driver, route_id):
+    """
+    Record route completion with actual fuel consumption data.
+    This allows the system to improve its fuel prediction model over time.
+    """
+    data = request.get_json()
+    
+    # Validate required fields
+    if not data or 'actual_fuel' not in data:
+        return jsonify({'message': 'Actual fuel consumption is required'}), 400
+    
+    # Get route
+    route = Route.query.get_or_404(route_id)
+    
+    # Get driver assignment if needed
+    driver_route = None
+    if current_driver:
+        driver_route = DriverRoute.query.filter_by(
+            route_id=route_id, 
+            driver_id=current_driver.id
+        ).first()
+    
+    # Get vehicle info
+    vehicle_id = data.get('vehicle_id')
+    if not vehicle_id and current_driver and current_driver.vehicle_id:
+        vehicle_id = current_driver.vehicle_id
+    
+    # If still no vehicle_id, try to get from driver_route
+    if not vehicle_id and driver_route:
+        # Extract vehicle ID from route data
+        route_data = json.loads(route.route_data)
+        for vr in route_data:
+            if 'vehicle_id' in vr:
+                vehicle_id = vr['vehicle_id']
+                break
+    
+    # If still no vehicle, use a default ID
+    if not vehicle_id:
+        vehicle_id = 1  # Default vehicle
+    
+    # Collect metadata about the route
+    route_metadata = {
+        'load_weight': data.get('load_weight', 0),
+        'avg_speed': data.get('avg_speed', 30),
+        'traffic_factor': data.get('traffic_factor', 1.0),
+        'road_type': data.get('road_type', 'mixed'),
+        'temperature': data.get('temperature', 25),
+        'weather_conditions': data.get('weather', 'clear'),
+        'driver_efficiency': data.get('driver_efficiency', 1.0)
+    }
+    
+    try:
+        # Initialize the collector with the current db instance
+        from models.fuel_data_collector import FuelDataCollector
+        collector = FuelDataCollector(db)
+        
+        # Record actual fuel consumption
+        success = collector.record_actual_fuel_consumption(
+            route_id=route_id,
+            vehicle_id=vehicle_id,
+            actual_fuel=float(data['actual_fuel']),
+            route_metadata=route_metadata,
+            driver_id=current_driver.id if current_driver else None
+        )
+        
+        if success:
+            # Try to retrain the model if we have enough data
+            collector.retrain_model()
+            
+            # If there's a driver_route, update its status
+            if driver_route and driver_route.status != 'completed':
+                driver_route.status = 'completed'
+                driver_route.completed_at = datetime.utcnow()
+                db.session.commit()
+            
+            return jsonify({
+                'message': 'Route completed and fuel data recorded successfully',
+                'route_id': route_id,
+                'actual_fuel': data['actual_fuel']
+            }), 200
+        else:
+            return jsonify({'message': 'Failed to record fuel data'}), 500
+    
+    except Exception as e:
+        return jsonify({'message': f'Error: {str(e)}'}), 500
+
+
+
+# Add this endpoint to get fuel prediction accuracy metrics
+@app.route('/api/fuel/accuracy', methods=['GET'])
+def get_fuel_accuracy_metrics():
+    """Get metrics on fuel prediction accuracy based on collected data."""
+    try:
+        # Import the FuelDataCollector
+        from models.fuel_data_collector import FuelDataCollector
+        
+        # Initialize the collector with the current db instance
+        collector = FuelDataCollector(db)
+        
+        # Get accuracy metrics
+        metrics = collector.analyze_prediction_accuracy()
+        
+        return jsonify(metrics), 200
+    
+    except Exception as e:
+        logger.error(f"Error in get_fuel_accuracy_metrics API: {e}")
+        # Return empty metrics instead of default sample data
+        return jsonify({
+            'record_count': 0,
+            'no_data': True,
+            'error': str(e)
+        }), 200
+
+@app.route('/api/drivers/efficiency', methods=['GET'])
+def get_driver_efficiency():
+    """Get driver efficiency rankings based on actual fuel consumption."""
+    try:
+        # Import the FuelDataCollector
+        from models.fuel_data_collector import FuelDataCollector
+        
+        # Initialize the collector with the current db instance
+        collector = FuelDataCollector(db)
+        
+        # Get driver rankings
+        rankings = collector.get_driver_efficiency_ranking()
+        
+        return jsonify(rankings), 200
+    
+    except Exception as e:
+        logger.error(f"Error in get_driver_efficiency API: {e}")
+        # Return empty list instead of sample data
+        return jsonify([]), 200
+
+
+@app.route('/fuel_analytics')
+def fuel_analytics_dashboard():
+    """View the fuel efficiency analytics dashboard."""
+    return render_template('fuel_analytics.html')
 
 
 if __name__ == '__main__':

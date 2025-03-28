@@ -1,184 +1,568 @@
-{% extends "base.html" %}
-
-{% block title %}Route Navigation{% endblock %}
-
-{% block head %}
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.3/dist/leaflet.css" />
-<link rel="stylesheet" href="https://unpkg.com/leaflet-routing-machine@3.2.12/dist/leaflet-routing-machine.css" />
-<link rel="stylesheet" href="{{ url_for('static', filename='css/driver_route.css') }}">
-{% endblock %}
-
-{% block content %}
+{% extends "base.html" %} {% block title %}Route Navigation{% endblock %} {%
+block head %}
+<meta
+  name="viewport"
+  content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"
+/>
+<link
+  rel="stylesheet"
+  href="https://unpkg.com/leaflet@1.9.3/dist/leaflet.css"
+/>
+<link
+  rel="stylesheet"
+  href="https://unpkg.com/leaflet-routing-machine@3.2.12/dist/leaflet-routing-machine.css"
+/>
+<link
+  rel="stylesheet"
+  href="{{ url_for('static', filename='css/driver_route.css') }}"
+/>
+{% endblock %} {% block content %}
 <div class="route-container">
-    <!-- Header -->
-    <div class="route-header">
-        <div class="d-flex justify-content-between align-items-center">
-            <a href="/driver/dashboard" class="text-white">
-                <i class="fas fa-chevron-left"></i>
-            </a>
-            <h4 class="mb-0" id="route-name">Loading route...</h4>
-            <div class="dropdown">
-                <button class="btn btn-link text-white" type="button" id="routeMenuButton" data-bs-toggle="dropdown" aria-expanded="false">
-                    <i class="fas fa-ellipsis-v"></i>
+  <!-- Header -->
+  <div class="route-header">
+    <div class="d-flex justify-content-between align-items-center">
+      <a href="/driver/dashboard" class="text-white">
+        <i class="fas fa-chevron-left"></i>
+      </a>
+      <h4 class="mb-0" id="route-name">Loading route...</h4>
+      <div class="dropdown">
+        <button
+          class="btn btn-link text-white"
+          type="button"
+          id="routeMenuButton"
+          data-bs-toggle="dropdown"
+          aria-expanded="false"
+        >
+          <i class="fas fa-ellipsis-v"></i>
+        </button>
+        <ul
+          class="dropdown-menu dropdown-menu-end"
+          aria-labelledby="routeMenuButton"
+        >
+          <li>
+            <a
+              class="dropdown-item"
+              href="#"
+              id="complete-route-btn"
+              data-bs-toggle="modal"
+              data-bs-target="#completeRouteModal"
+              ><i class="fas fa-flag-checkered me-2"></i>Complete Route</a
+            >
+          </li>
+          <li>
+            <a class="dropdown-item" href="#" id="refresh-route-btn"
+              ><i class="fas fa-sync me-2"></i>Refresh</a
+            >
+          </li>
+        </ul>
+      </div>
+    </div>
+    <div
+      class="d-flex justify-content-between align-items-center mt-2 small text-white-50"
+    >
+      <span id="route-stops-info">Loading stops...</span>
+      <span id="route-distance-info">Calculating...</span>
+    </div>
+  </div>
+
+  <!-- Map -->
+  <div class="nav-map">
+    <div id="map"></div>
+  </div>
+
+  <!-- Bottom Panel -->
+  <div class="bottom-panel">
+    <div class="panel-toggle" id="panel-toggle"></div>
+    <div class="panel-content">
+      <ul class="nav nav-tabs" id="stopsTabs" role="tablist">
+        <li class="nav-item" role="presentation">
+          <button
+            class="nav-link active"
+            id="stops-tab"
+            data-bs-toggle="tab"
+            data-bs-target="#stops-tab-content"
+            type="button"
+            role="tab"
+            aria-controls="stops"
+            aria-selected="true"
+          >
+            Stops
+          </button>
+        </li>
+        <li class="nav-item" role="presentation">
+          <button
+            class="nav-link"
+            id="directions-tab"
+            data-bs-toggle="tab"
+            data-bs-target="#directions-tab-content"
+            type="button"
+            role="tab"
+            aria-controls="directions"
+            aria-selected="false"
+          >
+            Directions
+          </button>
+        </li>
+      </ul>
+
+      <div class="tab-content pt-3" id="stopsTabContent">
+        <!-- Stops Tab -->
+        <div
+          class="tab-pane fade show active"
+          id="stops-tab-content"
+          role="tabpanel"
+          aria-labelledby="stops-tab"
+        >
+          <div id="stops-list">
+            <div class="text-center py-3">
+              <div class="spinner-border text-primary" role="status">
+                <span class="visually-hidden">Loading...</span>
+              </div>
+              <p class="mt-2">Loading stops...</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Directions Tab -->
+        <div
+          class="tab-pane fade"
+          id="directions-tab-content"
+          role="tabpanel"
+          aria-labelledby="directions-tab"
+        >
+          <div class="direction-steps" id="direction-steps">
+            <div class="text-center py-3">
+              <p>Select a stop to view turn-by-turn directions</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Delivery Action Modal -->
+  <div
+    class="modal fade"
+    id="deliveryActionModal"
+    tabindex="-1"
+    aria-labelledby="deliveryActionModalLabel"
+    aria-hidden="true"
+  >
+    <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="deliveryActionModalLabel">
+            Delivery Action
+          </h5>
+          <button
+            type="button"
+            class="btn-close"
+            data-bs-dismiss="modal"
+            aria-label="Close"
+          ></button>
+        </div>
+        <div class="modal-body">
+          <div id="delivery-form">
+            <div class="mb-3">
+              <label for="delivery-status" class="form-label"
+                >Delivery Status</label
+              >
+              <select class="form-select" id="delivery-status">
+                <option value="completed">Completed</option>
+                <option value="failed">Failed</option>
+              </select>
+            </div>
+
+            <div class="mb-3">
+              <label for="delivery-notes" class="form-label">Notes</label>
+              <textarea
+                class="form-control"
+                id="delivery-notes"
+                rows="3"
+                placeholder="Optional notes about the delivery"
+              ></textarea>
+            </div>
+
+            <div class="mb-3" id="signature-container">
+              <label class="form-label">Signature</label>
+              <div class="signature-capture">
+                <canvas id="signature-pad" width="460" height="200"></canvas>
+              </div>
+              <div class="text-end mt-1">
+                <button
+                  type="button"
+                  class="btn btn-sm btn-outline-secondary"
+                  id="clear-signature"
+                >
+                  Clear
                 </button>
-                <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="routeMenuButton">
-                    <li><a class="dropdown-item" href="#" id="complete-route-btn"><i class="fas fa-check-circle me-2"></i>Complete Route</a></li>
-                    <li><a class="dropdown-item" href="#" id="refresh-route-btn"><i class="fas fa-sync me-2"></i>Refresh</a></li>
-                </ul>
+              </div>
             </div>
-        </div>
-        <div class="d-flex justify-content-between align-items-center mt-2 small text-white-50">
-            <span id="route-stops-info">Loading stops...</span>
-            <span id="route-distance-info">Calculating...</span>
-        </div>
-    </div>
-    
-    <!-- Map -->
-    <div class="nav-map">
-        <div id="map"></div>
-    </div>
-    
-    <!-- Bottom Panel -->
-    <div class="bottom-panel">
-        <div class="panel-toggle" id="panel-toggle"></div>
-        <div class="panel-content">
-            <ul class="nav nav-tabs" id="stopsTabs" role="tablist">
-                <li class="nav-item" role="presentation">
-                    <button class="nav-link active" id="stops-tab" data-bs-toggle="tab" data-bs-target="#stops-tab-content" type="button" role="tab" aria-controls="stops" aria-selected="true">Stops</button>
-                </li>
-                <li class="nav-item" role="presentation">
-                    <button class="nav-link" id="directions-tab" data-bs-toggle="tab" data-bs-target="#directions-tab-content" type="button" role="tab" aria-controls="directions" aria-selected="false">Directions</button>
-                </li>
-            </ul>
-            
-            <div class="tab-content pt-3" id="stopsTabContent">
-                <!-- Stops Tab -->
-                <div class="tab-pane fade show active" id="stops-tab-content" role="tabpanel" aria-labelledby="stops-tab">
-                    <div id="stops-list">
-                        <div class="text-center py-3">
-                            <div class="spinner-border text-primary" role="status">
-                                <span class="visually-hidden">Loading...</span>
-                            </div>
-                            <p class="mt-2">Loading stops...</p>
-                        </div>
-                    </div>
-                </div>
-                
-                <!-- Directions Tab -->
-                <div class="tab-pane fade" id="directions-tab-content" role="tabpanel" aria-labelledby="directions-tab">
-                    <div class="direction-steps" id="direction-steps">
-                        <div class="text-center py-3">
-                            <p>Select a stop to view turn-by-turn directions</p>
-                        </div>
-                    </div>
-                </div>
+
+            <div class="mb-3">
+              <label for="delivery-photo" class="form-label"
+                >Photo (Optional)</label
+              >
+              <input
+                class="form-control"
+                type="file"
+                id="delivery-photo"
+                accept="image/*"
+                capture="camera"
+              />
             </div>
+          </div>
         </div>
+        <div class="modal-footer">
+          <button
+            type="button"
+            class="btn btn-secondary"
+            data-bs-dismiss="modal"
+          >
+            Cancel
+          </button>
+          <button type="button" class="btn btn-primary" id="submit-delivery">
+            Submit
+          </button>
+        </div>
+      </div>
     </div>
-    
-    <!-- Delivery Action Modal -->
-    <div class="modal fade" id="deliveryActionModal" tabindex="-1" aria-labelledby="deliveryActionModalLabel" aria-hidden="true">
-        <div class="modal-dialog modal-dialog-centered">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title" id="deliveryActionModalLabel">Delivery Action</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                </div>
-                <div class="modal-body">
-                    <div id="delivery-form">
-                        <div class="mb-3">
-                            <label for="delivery-status" class="form-label">Delivery Status</label>
-                            <select class="form-select" id="delivery-status">
-                                <option value="completed">Completed</option>
-                                <option value="failed">Failed</option>
-                            </select>
-                        </div>
-                        
-                        <div class="mb-3">
-                            <label for="delivery-notes" class="form-label">Notes</label>
-                            <textarea class="form-control" id="delivery-notes" rows="3" placeholder="Optional notes about the delivery"></textarea>
-                        </div>
-                        
-                        <div class="mb-3" id="signature-container">
-                            <label class="form-label">Signature</label>
-                            <div class="signature-capture">
-                                <canvas id="signature-pad" width="460" height="200"></canvas>
-                            </div>
-                            <div class="text-end mt-1">
-                                <button type="button" class="btn btn-sm btn-outline-secondary" id="clear-signature">Clear</button>
-                            </div>
-                        </div>
-                        
-                        <div class="mb-3">
-                            <label for="delivery-photo" class="form-label">Photo (Optional)</label>
-                            <input class="form-control" type="file" id="delivery-photo" accept="image/*" capture="camera">
-                        </div>
-                    </div>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                    <button type="button" class="btn btn-primary" id="submit-delivery">Submit</button>
-                </div>
-            </div>
+  </div>
+
+  <!-- Route Completion Modal -->
+  <div
+    class="modal fade"
+    id="completeRouteModal"
+    tabindex="-1"
+    aria-labelledby="completeRouteModalLabel"
+    aria-hidden="true"
+  >
+    <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="completeRouteModalLabel">
+            Complete Route
+          </h5>
+          <button
+            type="button"
+            class="btn-close"
+            data-bs-dismiss="modal"
+            aria-label="Close"
+          ></button>
         </div>
+        <div class="modal-body">
+          <form id="routeCompletionForm">
+            <div class="mb-3">
+              <label for="actual_fuel" class="form-label">
+                <i class="fas fa-gas-pump me-1"></i>Actual Fuel Used (liters)
+              </label>
+              <input
+                type="number"
+                class="form-control"
+                id="actual_fuel"
+                name="actual_fuel"
+                step="0.1"
+                min="0"
+                required
+                placeholder="Enter actual fuel consumption"
+              />
+              <div class="form-text">
+                Enter the actual amount of fuel used for this route
+              </div>
+            </div>
+
+            <div class="mb-3">
+              <label for="load_weight" class="form-label">
+                <i class="fas fa-weight me-1"></i>Cargo Weight (kg)
+              </label>
+              <input
+                type="number"
+                class="form-control"
+                id="load_weight"
+                name="load_weight"
+                step="1"
+                min="0"
+                placeholder="Optional: Enter cargo weight"
+              />
+            </div>
+
+            <div class="mb-3">
+              <label for="road_type" class="form-label">
+                <i class="fas fa-road me-1"></i>Predominant Road Type
+              </label>
+              <select class="form-select" id="road_type" name="road_type">
+                <option value="mixed" selected>Mixed</option>
+                <option value="highway">Highway</option>
+                <option value="urban">Urban</option>
+                <option value="rural">Rural</option>
+              </select>
+            </div>
+
+            <div class="mb-3">
+              <label for="weather" class="form-label">
+                <i class="fas fa-cloud me-1"></i>Weather Conditions
+              </label>
+              <select class="form-select" id="weather" name="weather">
+                <option value="clear" selected>Clear</option>
+                <option value="rain">Rain</option>
+                <option value="snow">Snow</option>
+                <option value="fog">Fog</option>
+                <option value="windy">Windy</option>
+              </select>
+            </div>
+
+            <div class="mb-3">
+              <label for="traffic_factor" class="form-label">
+                <i class="fas fa-traffic-light me-1"></i>Traffic Conditions
+              </label>
+              <select
+                class="form-select"
+                id="traffic_factor"
+                name="traffic_factor"
+              >
+                <option value="1.0" selected>Normal</option>
+                <option value="1.2">Light Congestion</option>
+                <option value="1.5">Moderate Congestion</option>
+                <option value="2.0">Heavy Congestion</option>
+              </select>
+            </div>
+
+            <div class="form-text mb-3">
+              <p>
+                <i class="fas fa-info-circle me-1"></i>This information helps
+                improve fuel prediction accuracy for future routes.
+              </p>
+            </div>
+          </form>
+        </div>
+        <div class="modal-footer">
+          <button
+            type="button"
+            class="btn btn-secondary"
+            data-bs-dismiss="modal"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            class="btn btn-success"
+            id="submitRouteCompletion"
+          >
+            <i class="fas fa-check-circle me-1"></i>Complete Route
+          </button>
+        </div>
+      </div>
     </div>
-    
-    <!-- Live Location Permission Modal -->
-    <div class="modal fade" id="locationPermissionModal" data-bs-backdrop="static" data-bs-keyboard="false" tabindex="-1" aria-labelledby="locationPermissionModalLabel" aria-hidden="true">
-        <div class="modal-dialog modal-dialog-centered">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title" id="locationPermissionModalLabel">Location Access Required</h5>
-                </div>
-                <div class="modal-body">
-                    <p>This app requires access to your location to provide turn-by-turn navigation.</p>
-                    <p>Please allow location access when prompted.</p>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-primary" id="enable-location-btn">Enable Location</button>
-                </div>
-            </div>
+  </div>
+
+  <!-- Live Location Permission Modal -->
+  <div
+    class="modal fade"
+    id="locationPermissionModal"
+    data-bs-backdrop="static"
+    data-bs-keyboard="false"
+    tabindex="-1"
+    aria-labelledby="locationPermissionModalLabel"
+    aria-hidden="true"
+  >
+    <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="locationPermissionModalLabel">
+            Location Access Required
+          </h5>
         </div>
+        <div class="modal-body">
+          <p>
+            This app requires access to your location to provide turn-by-turn
+            navigation.
+          </p>
+          <p>Please allow location access when prompted.</p>
+        </div>
+        <div class="modal-footer">
+          <button
+            type="button"
+            class="btn btn-primary"
+            id="enable-location-btn"
+          >
+            Enable Location
+          </button>
+        </div>
+      </div>
     </div>
-    
-    <!-- Stop Card Template (Hidden) -->
-    <template id="stop-card-template">
-        <div class="card stop-card mb-2" data-stop-id="">
-            <div class="card-body p-3">
-                <div class="d-flex justify-content-between align-items-center">
-                    <div>
-                        <h6 class="card-title mb-0 stop-name"></h6>
-                        <p class="card-text mb-0 small text-muted stop-address"></p>
-                        <p class="card-text mb-0 small time-window"></p>
-                    </div>
-                    <div class="text-end">
-                        <span class="stop-status"></span>
-                        <span class="stop-number badge bg-secondary rounded-pill"></span>
-                    </div>
-                </div>
-                <div class="delivery-actions mt-2 pt-2 border-top">
-                    <div class="btn-group w-100">
-                        <button type="button" class="btn btn-sm btn-outline-primary navigate-btn">
-                            <i class="fas fa-directions me-1"></i>Navigate
-                        </button>
-                        <button type="button" class="btn btn-sm btn-outline-success arrived-btn">
-                            <i class="fas fa-check-circle me-1"></i>Arrived
-                        </button>
-                        <button type="button" class="btn btn-sm btn-outline-info complete-btn">
-                            <i class="fas fa-clipboard-check me-1"></i>Complete
-                        </button>
-                    </div>
-                </div>
-            </div>
+  </div>
+
+  <!-- Stop Card Template (Hidden) -->
+  <template id="stop-card-template">
+    <div class="card stop-card mb-2" data-stop-id="">
+      <div class="card-body p-3">
+        <div class="d-flex justify-content-between align-items-center">
+          <div>
+            <h6 class="card-title mb-0 stop-name"></h6>
+            <p class="card-text mb-0 small text-muted stop-address"></p>
+            <p class="card-text mb-0 small time-window"></p>
+          </div>
+          <div class="text-end">
+            <span class="stop-status"></span>
+            <span class="stop-number badge bg-secondary rounded-pill"></span>
+          </div>
         </div>
-    </template>
+        <div class="delivery-actions mt-2 pt-2 border-top">
+          <div class="btn-group w-100">
+            <button
+              type="button"
+              class="btn btn-sm btn-outline-primary navigate-btn"
+            >
+              <i class="fas fa-directions me-1"></i>Navigate
+            </button>
+            <button
+              type="button"
+              class="btn btn-sm btn-outline-success arrived-btn"
+            >
+              <i class="fas fa-check-circle me-1"></i>Arrived
+            </button>
+            <button
+              type="button"
+              class="btn btn-sm btn-outline-info complete-btn"
+            >
+              <i class="fas fa-clipboard-check me-1"></i>Complete
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </template>
 </div>
-{% endblock %}
+{% endblock %} 
 
 {% block scripts %}
 <script src="https://unpkg.com/leaflet@1.9.3/dist/leaflet.js"></script>
 <script src="https://unpkg.com/leaflet-routing-machine@3.2.12/dist/leaflet-routing-machine.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/signature_pad@4.0.0/dist/signature_pad.umd.min.js"></script>
 <script src="{{ url_for('static', filename='js/driver_route.js') }}"></script>
+
+<script>
+  document.addEventListener("DOMContentLoaded", function () {
+    // Store the route ID globally for use in both scripts
+    window.routeId = getRouteIdFromUrl();
+    
+    // Ensure the modal doesn't close on backdrop click
+    const completeRouteModal = document.getElementById('completeRouteModal');
+    completeRouteModal.setAttribute('data-bs-backdrop', 'static');
+    completeRouteModal.setAttribute('data-bs-keyboard', 'false');
+    
+    // Handle route completion form submission
+    document
+      .getElementById("submitRouteCompletion")
+      .addEventListener("click", function () {
+        // Get form data
+        const actualFuel = document.getElementById("actual_fuel").value;
+        const loadWeight = document.getElementById("load_weight").value;
+        const roadType = document.getElementById("road_type").value;
+        const weather = document.getElementById("weather").value;
+        const trafficFactor = document.getElementById("traffic_factor").value;
+
+        // Validate form
+        if (!actualFuel) {
+          alert("Please enter the actual fuel consumption");
+          return;
+        }
+
+        // Prepare data
+        const data = {
+          actual_fuel: parseFloat(actualFuel),
+          load_weight: loadWeight ? parseFloat(loadWeight) : 0,
+          road_type: roadType,
+          weather: weather,
+          traffic_factor: parseFloat(trafficFactor),
+        };
+
+        // Disable button during submission
+        const submitBtn = document.getElementById("submitRouteCompletion");
+        const originalText = submitBtn.innerHTML;
+        submitBtn.disabled = true;
+        submitBtn.innerHTML =
+          '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Submitting...';
+
+        // First, submit the fuel consumption data
+        fetch(`/api/routes/${window.routeId}/complete`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: "Bearer " + getToken(),
+          },
+          body: JSON.stringify(data),
+        })
+          .then((response) => {
+            if (!response.ok) {
+              throw new Error("Failed to submit fuel consumption data");
+            }
+            return response.json();
+          })
+          .then((data) => {
+            // Now update the route status to completed
+            return updateRouteStatus("completed");
+          })
+          .then(() => {
+            // Show success message
+            alert(
+              "Route completed successfully! Your fuel data helps improve future predictions."
+            );
+
+            // Close modal
+            const modal = bootstrap.Modal.getInstance(
+              document.getElementById("completeRouteModal")
+            );
+            modal.hide();
+
+            // Redirect to dashboard
+            window.location.href = "/driver/dashboard";
+          })
+          .catch((error) => {
+            console.error("Error completing route:", error);
+            alert("Error completing route. Please try again.");
+
+            // Re-enable button
+            submitBtn.disabled = false;
+            submitBtn.innerHTML = originalText;
+          });
+      });
+
+    // Function to update route status
+    function updateRouteStatus(status) {
+      return fetch(`/driver/routes/${window.routeId}/status`, {
+        method: "PUT",
+        headers: {
+          Authorization: "Bearer " + getToken(),
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          status: status,
+        }),
+      }).then((response) => {
+        if (!response.ok) {
+          throw new Error("Failed to update route status");
+        }
+        return response.json();
+      });
+    }
+
+    // Function to get route ID from URL
+    function getRouteIdFromUrl() {
+      const pathSegments = window.location.pathname.split("/");
+      return pathSegments[pathSegments.length - 1];
+    }
+
+    // Helper function to get token
+    function getToken() {
+      return localStorage.getItem("driver_token") || "";
+    }
+    
+    // Cancel button should only close the modal without completing the route
+    document.querySelector('#completeRouteModal .btn-secondary').addEventListener('click', function() {
+      const modal = bootstrap.Modal.getInstance(document.getElementById('completeRouteModal'));
+      modal.hide();
+    });
+  });
+</script>
 {% endblock %}

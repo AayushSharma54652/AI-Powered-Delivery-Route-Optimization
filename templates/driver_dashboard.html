@@ -469,6 +469,7 @@
         .then(() => {
             // Clear token from localStorage
             localStorage.removeItem('driver_token');
+            sessionStorage.removeItem('driver_token');
             
             // Redirect to login page
             window.location.href = '/driver/login';
@@ -478,6 +479,7 @@
             
             // Force logout anyway
             localStorage.removeItem('driver_token');
+            sessionStorage.removeItem('driver_token');
             window.location.href = '/driver/login';
         });
     }

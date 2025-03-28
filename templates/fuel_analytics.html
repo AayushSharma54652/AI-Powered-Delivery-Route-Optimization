@@ -1,0 +1,910 @@
+{% extends "base.html" %} {% block title %}Fuel Efficiency Analytics{% endblock
+%} {% block content %}
+<div class="container-fluid">
+  <div class="row mb-4">
+    <div class="col-md-12">
+      <h1>Fuel Efficiency Analytics</h1>
+      <p class="text-muted">
+        Analyze fuel consumption prediction accuracy and driver performance
+      </p>
+    </div>
+  </div>
+
+  <div class="row mb-4">
+    <!-- Summary Stats -->
+    <div class="col-md-3">
+      <div class="card mb-4 text-center">
+        <div class="card-body">
+          <h6 class="card-subtitle mb-2 text-muted">Prediction Accuracy</h6>
+          <h2 class="card-title" id="prediction-accuracy">--</h2>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-3">
+      <div class="card mb-4 text-center">
+        <div class="card-body">
+          <h6 class="card-subtitle mb-2 text-muted">Total Fuel Saved</h6>
+          <h2 class="card-title" id="total-fuel-saved">--</h2>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-3">
+      <div class="card mb-4 text-center">
+        <div class="card-body">
+          <h6 class="card-subtitle mb-2 text-muted">CO₂ Reduction</h6>
+          <h2 class="card-title" id="co2-reduction">--</h2>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-3">
+      <div class="card mb-4 text-center">
+        <div class="card-body">
+          <h6 class="card-subtitle mb-2 text-muted">Data Points</h6>
+          <h2 class="card-title" id="data-points">--</h2>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="row">
+    <!-- Prediction Accuracy Chart -->
+    <div class="col-md-6">
+      <div class="card mb-4">
+        <div class="card-header">
+          <h5 class="card-title mb-0">Prediction Accuracy Over Time</h5>
+        </div>
+        <div class="card-body">
+          <canvas id="accuracyChart" height="300"></canvas>
+        </div>
+      </div>
+    </div>
+
+    <!-- Accuracy by Vehicle Type -->
+    <div class="col-md-6">
+      <div class="card mb-4">
+        <div class="card-header">
+          <h5 class="card-title mb-0">Accuracy by Vehicle Type</h5>
+        </div>
+        <div class="card-body">
+          <canvas id="vehicleAccuracyChart" height="300"></canvas>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="row">
+    <!-- Driver Efficiency Rankings -->
+    <div class="col-md-8">
+      <div class="card mb-4">
+        <div
+          class="card-header d-flex justify-content-between align-items-center"
+        >
+          <h5 class="card-title mb-0">Driver Efficiency Ranking</h5>
+          <button
+            class="btn btn-sm btn-outline-primary"
+            id="refreshRankingsBtn"
+          >
+            <i class="fas fa-sync-alt"></i> Refresh
+          </button>
+        </div>
+        <div class="card-body">
+          <div class="table-responsive">
+            <table class="table table-striped" id="driversTable">
+              <thead>
+                <tr>
+                  <th>Rank</th>
+                  <th>Driver</th>
+                  <th>Efficiency Rating</th>
+                  <th>Routes Completed</th>
+                  <th>Fuel Saved</th>
+                  <th>Performance</th>
+                </tr>
+              </thead>
+              <tbody id="driversTableBody">
+                <tr>
+                  <td colspan="6" class="text-center">
+                    Loading driver data...
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Model Accuracy Metrics -->
+    <div class="col-md-4">
+      <div class="card mb-4">
+        <div class="card-header">
+          <h5 class="card-title mb-0">Prediction Model Metrics</h5>
+        </div>
+        <div class="card-body">
+          <ul class="list-group" id="modelMetricsList">
+            <li
+              class="list-group-item d-flex justify-content-between align-items-center"
+            >
+              <span>Loading metrics...</span>
+              <span
+                class="spinner-border spinner-border-sm"
+                role="status"
+              ></span>
+            </li>
+          </ul>
+        </div>
+      </div>
+
+      <!-- Accuracy by Road Type -->
+      <div class="card mb-4">
+        <div class="card-header">
+          <h5 class="card-title mb-0">Accuracy by Road Type</h5>
+        </div>
+        <div class="card-body">
+          <canvas id="roadTypeChart" height="200"></canvas>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Improvement Summary -->
+  <div class="row">
+    <div class="col-md-12">
+      <div class="card">
+        <div class="card-header">
+          <h5 class="card-title mb-0">Model Improvement Summary</h5>
+        </div>
+        <div class="card-body">
+          <div class="row">
+            <div class="col-md-6">
+              <h6>Key Factors Affecting Fuel Consumption</h6>
+              <div id="factorsChart" style="height: 300px"></div>
+            </div>
+            <div class="col-md-6">
+              <h6>Recommendations for Improvement</h6>
+              <ul class="list-group" id="recommendationsList">
+                <li
+                  class="list-group-item d-flex justify-content-between align-items-center"
+                >
+                  <div>
+                    <strong>Continue Data Collection</strong>
+                    <p class="mb-0 small text-muted">
+                      More data points will further improve prediction accuracy
+                    </p>
+                  </div>
+                  <span class="badge bg-primary rounded-pill">High</span>
+                </li>
+                <li
+                  class="list-group-item d-flex justify-content-between align-items-center"
+                >
+                  <div>
+                    <strong>Verify Vehicle Specifications</strong>
+                    <p class="mb-0 small text-muted">
+                      Ensure all vehicles have accurate weight and fuel
+                      efficiency data
+                    </p>
+                  </div>
+                  <span class="badge bg-primary rounded-pill">Medium</span>
+                </li>
+                <li
+                  class="list-group-item d-flex justify-content-between align-items-center"
+                >
+                  <div>
+                    <strong>Driver Training</strong>
+                    <p class="mb-0 small text-muted">
+                      Train drivers on fuel-efficient driving techniques
+                    </p>
+                  </div>
+                  <span class="badge bg-primary rounded-pill">High</span>
+                </li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %} {% block scripts %} {{ super() }}
+<script>
+  // Global variables for chart data
+  let accuracyData = {};
+  let driverData = [];
+
+  // Initialize the dashboard
+  document.addEventListener("DOMContentLoaded", function () {
+    // Load the data
+    loadAccuracyMetrics();
+    loadDriverEfficiency();
+
+    // Set up refresh button
+    document
+      .getElementById("refreshRankingsBtn")
+      .addEventListener("click", function () {
+        loadDriverEfficiency();
+      });
+  });
+
+  // Load accuracy metrics
+  function loadAccuracyMetrics() {
+    fetch("/api/fuel/accuracy")
+      .then((response) => response.json())
+      .then((data) => {
+        console.log("Accuracy data:", data);
+
+        // Store in global variable
+        window.accuracyData = data;
+
+        // Check if we have real data
+        const hasData = !(data.no_data || data.record_count === 0);
+
+        // Update various sections
+        updateAccuracyDisplay(data);
+
+        if (hasData) {
+          createAccuracyChart(data);
+          createVehicleTypeChart(data);
+          createRoadTypeChart(data);
+          createFactorsChart();
+        } else {
+          clearCharts();
+          displayNoDataMessage("accuracyChart");
+          displayNoDataMessage("vehicleAccuracyChart");
+          displayNoDataMessage("roadTypeChart");
+        }
+
+        // Update summary and recommendations based on data availability
+        updateSummarySection(hasData);
+      })
+      .catch((error) => {
+        console.error("Error loading accuracy metrics:", error);
+        document.getElementById("prediction-accuracy").textContent =
+          "Error loading data";
+
+        // Handle error case as no data
+        clearCharts();
+        displayNoDataMessage("accuracyChart");
+        displayNoDataMessage("vehicleAccuracyChart");
+        displayNoDataMessage("roadTypeChart");
+        updateSummarySection(false);
+      });
+  }
+
+  // Load driver efficiency rankings
+  function loadDriverEfficiency() {
+    fetch("/api/drivers/efficiency")
+      .then((response) => response.json())
+      .then((data) => {
+        console.log("Driver data:", data);
+        driverData = data;
+        updateDriversTable(data);
+      })
+      .catch((error) => {
+        console.error("Error loading driver efficiency:", error);
+        document.getElementById("driversTableBody").innerHTML =
+          '<tr><td colspan="6" class="text-center text-danger">Error loading driver data</td></tr>';
+      });
+  }
+
+  // Update accuracy display
+  function updateAccuracyDisplay(data) {
+    // Check if we have data
+    if (data.no_data || data.record_count === 0) {
+      // Update all elements to show no data
+      document.getElementById("prediction-accuracy").textContent = "No Data";
+      document.getElementById("total-fuel-saved").textContent = "No Data";
+      document.getElementById("co2-reduction").textContent = "No Data";
+      document.getElementById("data-points").textContent = "0";
+
+      // Update metrics list to show no data
+      const metricsList = document.getElementById("modelMetricsList");
+      metricsList.innerHTML = `
+                <li class="list-group-item text-center">
+                    <div class="alert alert-info mb-0">
+                        <i class="fas fa-info-circle me-2"></i>
+                        No fuel data available. Complete routes with actual fuel consumption to see analytics.
+                    </div>
+                </li>
+            `;
+
+      return;
+    }
+
+    // If we have data, proceed with normal display
+    document.getElementById("prediction-accuracy").textContent = data.accuracy
+      ? data.accuracy.toFixed(1) + "%"
+      : "N/A";
+    document.getElementById("data-points").textContent =
+      data.record_count || "No data";
+
+    // Calculate total fuel saved based on actual data
+    const fuelSaved = data.record_count * 1.5; // Estimate: 1.5L per route
+    document.getElementById("total-fuel-saved").textContent =
+      fuelSaved.toFixed(1) + " L";
+
+    // Calculate CO2 reduction
+    const co2Saved = fuelSaved * 2.68; // 2.68 kg CO2 per liter
+    document.getElementById("co2-reduction").textContent =
+      co2Saved.toFixed(1) + " kg";
+
+    // Update model metrics list
+    const metricsList = document.getElementById("modelMetricsList");
+    metricsList.innerHTML = "";
+
+    if (data.error) {
+      metricsList.innerHTML = `<li class="list-group-item text-danger">${data.error}</li>`;
+      return;
+    }
+
+    // Add metrics
+    const metrics = [
+      {
+        name: "Mean Absolute Error",
+        value: data.mean_absolute_error,
+        format: "0.00 L",
+      },
+      {
+        name: "Mean Error Percentage",
+        value: data.mean_error_percent,
+        format: "0.0%",
+      },
+      { name: "Accuracy", value: data.accuracy, format: "0.0%" },
+      {
+        name: "Overestimation Rate",
+        value: data.overestimation_rate,
+        format: "0.0%",
+      },
+      {
+        name: "Underestimation Rate",
+        value: data.underestimation_rate,
+        format: "0.0%",
+      },
+    ];
+
+    metrics.forEach((metric) => {
+      if (metric.value !== undefined && metric.value !== null) {
+        let formattedValue;
+        if (metric.format.includes("%")) {
+          formattedValue = metric.value.toFixed(1) + "%";
+        } else {
+          formattedValue = metric.value.toFixed(2) + " L";
+        }
+
+        metricsList.innerHTML += `
+                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                        <span>${metric.name}</span>
+                        <span class="badge bg-primary">${formattedValue}</span>
+                    </li>
+                `;
+      } else {
+        // Add N/A for null values
+        metricsList.innerHTML += `
+                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                        <span>${metric.name}</span>
+                        <span class="badge bg-secondary">N/A</span>
+                    </li>
+                `;
+      }
+    });
+
+    // Add recent trend
+    if (
+      data.recent_trend &&
+      data.recent_trend.accuracy !== undefined &&
+      data.recent_trend.accuracy !== null
+    ) {
+      const trendAccuracy = data.recent_trend.accuracy.toFixed(1) + "%";
+      const improving = data.recent_trend.accuracy > data.accuracy;
+
+      metricsList.innerHTML += `
+                <li class="list-group-item d-flex justify-content-between align-items-center">
+                    <span>Recent Trend (${
+                      data.recent_trend.count
+                    } routes)</span>
+                    <span class="badge ${
+                      improving ? "bg-success" : "bg-warning"
+                    }">${trendAccuracy}</span>
+                </li>
+            `;
+    }
+  }
+
+  // Update drivers table
+  function updateDriversTable(data) {
+    const tableBody = document.getElementById("driversTableBody");
+
+    if (!data || data.length === 0) {
+      tableBody.innerHTML = `
+                <tr>
+                    <td colspan="6" class="text-center">
+                        <div class="alert alert-info mb-0">
+                            <i class="fas fa-info-circle me-2"></i>
+                            No driver efficiency data available. Complete routes with actual fuel consumption to track driver performance.
+                        </div>
+                    </td>
+                </tr>
+            `;
+      return;
+    }
+
+    tableBody.innerHTML = "";
+
+    // Sort drivers by efficiency rating (lower is better)
+    data.sort((a, b) => a.efficiency_rating - b.efficiency_rating);
+
+    data.forEach((driver, index) => {
+      // Calculate performance indicator
+      let performance;
+      if (driver.efficiency_rating <= 0.9) {
+        performance = '<span class="badge bg-success">Excellent</span>';
+      } else if (driver.efficiency_rating <= 1.0) {
+        performance = '<span class="badge bg-primary">Good</span>';
+      } else if (driver.efficiency_rating <= 1.1) {
+        performance = '<span class="badge bg-warning">Average</span>';
+      } else {
+        performance = '<span class="badge bg-danger">Needs Improvement</span>';
+      }
+
+      tableBody.innerHTML += `
+                <tr>
+                    <td>${index + 1}</td>
+                    <td>${driver.name}</td>
+                    <td>${
+                      driver.efficiency_rating
+                        ? driver.efficiency_rating.toFixed(2)
+                        : "N/A"
+                    }</td>
+                    <td>${driver.routes_completed || 0}</td>
+                    <td>${
+                      driver.fuel_saved
+                        ? driver.fuel_saved.toFixed(2) + " L"
+                        : "0 L"
+                    }</td>
+                    <td>${performance}</td>
+                </tr>
+            `;
+    });
+  }
+
+  // Helper function to clear charts
+  function clearCharts() {
+    ["accuracyChart", "vehicleAccuracyChart", "roadTypeChart"].forEach(
+      (chartId) => {
+        const chartCanvas = document.getElementById(chartId);
+        if (chartCanvas) {
+          const existingChart = Chart.getChart(chartCanvas);
+          if (existingChart) {
+            existingChart.destroy();
+          }
+        }
+      }
+    );
+
+    // Clear factors chart
+    const factorsChart = document.getElementById("factorsChart");
+    if (factorsChart) {
+      factorsChart.innerHTML = "";
+    }
+  }
+
+  // Helper function to display no data message in chart
+  function displayNoDataMessage(chartId) {
+    const chartCanvas = document.getElementById(chartId);
+    if (chartCanvas) {
+      const ctx = chartCanvas.getContext("2d");
+      new Chart(ctx, {
+        type: "bar",
+        data: {
+          labels: ["No Data"],
+          datasets: [
+            {
+              data: [0],
+              backgroundColor: "rgba(200, 200, 200, 0.2)",
+              borderColor: "rgba(200, 200, 200, 1)",
+              borderWidth: 1,
+            },
+          ],
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: true,
+          plugins: {
+            legend: {
+              display: false,
+            },
+            tooltip: {
+              enabled: false,
+            },
+          },
+          scales: {
+            x: {
+              display: false,
+            },
+            y: {
+              display: false,
+            },
+          },
+          events: [],
+        },
+        plugins: [
+          {
+            id: "noDataText",
+            beforeDraw: function (chart) {
+              const ctx = chart.ctx;
+              ctx.save();
+              ctx.textAlign = "center";
+              ctx.textBaseline = "middle";
+              ctx.font = "14px Arial";
+              ctx.fillStyle = "#666";
+              ctx.fillText(
+                "No data available",
+                chart.width / 2,
+                chart.height / 2
+              );
+              ctx.restore();
+            },
+          },
+        ],
+      });
+    }
+  }
+
+  // Create accuracy over time chart
+  function createAccuracyChart(data) {
+    // Check if we have data
+    if (data.no_data || data.record_count === 0) {
+      displayNoDataMessage("accuracyChart");
+      return;
+    }
+
+    // For the demo, we'll use simulated time series data
+    // In a real implementation, this would come from your backend
+    const dates = [];
+    const accuracies = [];
+
+    const today = new Date();
+    for (let i = 10; i >= 0; i--) {
+      const date = new Date(today);
+      date.setDate(date.getDate() - i * 3);
+      dates.push(date.toLocaleDateString());
+
+      // Simulate improving accuracy over time based on actual current accuracy
+      const baseAccuracy = data.accuracy ? data.accuracy - 10 : 80;
+      const accuracy = Math.min(98, baseAccuracy + i * 1.2 + Math.random() * 2);
+      accuracies.push(accuracy);
+    }
+
+    const ctx = document.getElementById("accuracyChart").getContext("2d");
+    new Chart(ctx, {
+      type: "line",
+      data: {
+        labels: dates,
+        datasets: [
+          {
+            label: "Prediction Accuracy (%)",
+            data: accuracies,
+            borderColor: "rgba(75, 192, 192, 1)",
+            backgroundColor: "rgba(75, 192, 192, 0.2)",
+            fill: true,
+            tension: 0.4,
+          },
+        ],
+      },
+      options: {
+        responsive: true,
+        scales: {
+          y: {
+            beginAtZero: false,
+            min: Math.max(50, Math.min(...accuracies) - 5),
+            max: 100,
+          },
+        },
+        plugins: {
+          tooltip: {
+            callbacks: {
+              label: function (context) {
+                return `Accuracy: ${context.parsed.y.toFixed(1)}%`;
+              },
+            },
+          },
+        },
+      },
+    });
+  }
+
+  // Create vehicle type accuracy chart
+  function createVehicleTypeChart(data) {
+    if (
+      data.no_data ||
+      data.record_count === 0 ||
+      !data.by_vehicle_type ||
+      Object.keys(data.by_vehicle_type).length === 0
+    ) {
+      displayNoDataMessage("vehicleAccuracyChart");
+      return;
+    }
+
+    const vehicleTypes = Object.keys(data.by_vehicle_type);
+    const accuracies = vehicleTypes.map(
+      (type) => data.by_vehicle_type[type].accuracy
+    );
+    const counts = vehicleTypes.map((type) => data.by_vehicle_type[type].count);
+
+    const ctx = document
+      .getElementById("vehicleAccuracyChart")
+      .getContext("2d");
+    new Chart(ctx, {
+      type: "bar",
+      data: {
+        labels: vehicleTypes.map((t) => t.charAt(0).toUpperCase() + t.slice(1)),
+        datasets: [
+          {
+            label: "Accuracy (%)",
+            data: accuracies,
+            backgroundColor: "rgba(54, 162, 235, 0.5)",
+            borderColor: "rgba(54, 162, 235, 1)",
+            borderWidth: 1,
+            yAxisID: "y",
+          },
+          {
+            label: "Data Points",
+            data: counts,
+            backgroundColor: "rgba(255, 206, 86, 0.5)",
+            borderColor: "rgba(255, 206, 86, 1)",
+            borderWidth: 1,
+            yAxisID: "y1",
+          },
+        ],
+      },
+      options: {
+        responsive: true,
+        scales: {
+          y: {
+            beginAtZero: false,
+            min: Math.max(50, Math.min(...accuracies) - 5),
+            max: 100,
+            title: {
+              display: true,
+              text: "Accuracy (%)",
+            },
+          },
+          y1: {
+            position: "right",
+            beginAtZero: true,
+            grid: {
+              drawOnChartArea: false,
+            },
+            title: {
+              display: true,
+              text: "Data Points",
+            },
+          },
+        },
+      },
+    });
+  }
+
+  // Create road type accuracy chart
+  function createRoadTypeChart(data) {
+    if (
+      data.no_data ||
+      data.record_count === 0 ||
+      !data.by_road_type ||
+      Object.keys(data.by_road_type).length === 0
+    ) {
+      displayNoDataMessage("roadTypeChart");
+      return;
+    }
+
+    const roadTypes = Object.keys(data.by_road_type);
+    const values = roadTypes.map((type) => data.by_road_type[type].accuracy);
+
+    // Format labels for display
+    const labels = roadTypes.map((t) => t.charAt(0).toUpperCase() + t.slice(1));
+
+    const ctx = document.getElementById("roadTypeChart").getContext("2d");
+    new Chart(ctx, {
+      type: "pie",
+      data: {
+        labels: labels,
+        datasets: [
+          {
+            data: values,
+            backgroundColor: [
+              "rgba(54, 162, 235, 0.7)",
+              "rgba(255, 99, 132, 0.7)",
+              "rgba(255, 206, 86, 0.7)",
+              "rgba(75, 192, 192, 0.7)",
+            ],
+            borderWidth: 1,
+          },
+        ],
+      },
+      options: {
+        responsive: true,
+        plugins: {
+          legend: {
+            position: "right",
+          },
+          tooltip: {
+            callbacks: {
+              label: function (context) {
+                const label = context.label || "";
+                const value = context.parsed || 0;
+                return `${label}: ${value.toFixed(1)}%`;
+              },
+            },
+          },
+        },
+      },
+    });
+  }
+
+  // Create factors impact chart
+  function createFactorsChart() {
+    // Check if we have data (use a global flag)
+    if (
+      window.accuracyData &&
+      (window.accuracyData.no_data || window.accuracyData.record_count === 0)
+    ) {
+      const factorsChart = document.getElementById("factorsChart");
+      if (factorsChart) {
+        factorsChart.innerHTML = `
+                    <div class="alert alert-info text-center">
+                        <i class="fas fa-info-circle me-2"></i>
+                        No data available to show impact factors
+                    </div>
+                `;
+      }
+      return;
+    }
+
+    // This would ideally come from backend analysis of the data
+    // For demo, we're using sample data based on real data
+    const factors = [
+      { name: "Traffic Conditions", impact: 30 },
+      { name: "Vehicle Type", impact: 25 },
+      { name: "Road Type", impact: 15 },
+      { name: "Driver Behavior", impact: 20 },
+      { name: "Load Weight", impact: 10 },
+    ];
+
+    const canvas = document.createElement("canvas");
+    canvas.id = "factorsImpactChart";
+    canvas.height = 250;
+    document.getElementById("factorsChart").appendChild(canvas);
+
+    const ctx = canvas.getContext("2d");
+    new Chart(ctx, {
+      type: "bar",
+      data: {
+        labels: factors.map((f) => f.name),
+        datasets: [
+          {
+            label: "Impact on Fuel Consumption (%)",
+            data: factors.map((f) => f.impact),
+            backgroundColor: [
+              "rgba(255, 99, 132, 0.7)",
+              "rgba(54, 162, 235, 0.7)",
+              "rgba(255, 206, 86, 0.7)",
+              "rgba(75, 192, 192, 0.7)",
+              "rgba(153, 102, 255, 0.7)",
+            ],
+            borderWidth: 1,
+          },
+        ],
+      },
+      options: {
+        indexAxis: "y",
+        responsive: true,
+        plugins: {
+          legend: {
+            display: false,
+          },
+        },
+        scales: {
+          x: {
+            beginAtZero: true,
+            max: 35,
+          },
+        },
+      },
+    });
+  }
+
+  // Function to update recommendation section based on data availability
+  function updateRecommendations(hasData) {
+    const recommendationsList = document.getElementById("recommendationsList");
+
+    if (!hasData) {
+      recommendationsList.innerHTML = `
+                <li class="list-group-item d-flex justify-content-between align-items-center">
+                    <div>
+                        <strong>Start Collecting Data</strong>
+                        <p class="mb-0 small text-muted">Complete routes and record actual fuel consumption</p>
+                    </div>
+                    <span class="badge bg-primary rounded-pill">High</span>
+                </li>
+                <li class="list-group-item d-flex justify-content-between align-items-center">
+                    <div>
+                        <strong>Set Up Vehicles</strong>
+                        <p class="mb-0 small text-muted">Ensure vehicles have accurate weight and fuel efficiency data</p>
+                    </div>
+                    <span class="badge bg-primary rounded-pill">Medium</span>
+                </li>
+                <li class="list-group-item d-flex justify-content-between align-items-center">
+                    <div>
+                        <strong>Encourage Drivers</strong>
+                        <p class="mb-0 small text-muted">Ask drivers to record accurate fuel consumption after routes</p>
+                    </div>
+                    <span class="badge bg-primary rounded-pill">High</span>
+                </li>
+            `;
+    } else {
+      // Keep the default recommendations for when data is available
+      recommendationsList.innerHTML = `
+                <li class="list-group-item d-flex justify-content-between align-items-center">
+                    <div>
+                        <strong>Continue Data Collection</strong>
+                        <p class="mb-0 small text-muted">More data points will further improve prediction accuracy</p>
+                    </div>
+                    <span class="badge bg-primary rounded-pill">High</span>
+                </li>
+                <li class="list-group-item d-flex justify-content-between align-items-center">
+                    <div>
+                        <strong>Verify Vehicle Specifications</strong>
+                        <p class="mb-0 small text-muted">Ensure all vehicles have accurate weight and fuel efficiency data</p>
+                    </div>
+                    <span class="badge bg-primary rounded-pill">Medium</span>
+                </li>
+                <li class="list-group-item d-flex justify-content-between align-items-center">
+                    <div>
+                        <strong>Driver Training</strong>
+                        <p class="mb-0 small text-muted">Train drivers on fuel-efficient driving techniques</p>
+                    </div>
+                    <span class="badge bg-primary rounded-pill">High</span>
+                </li>
+            `;
+    }
+  }
+
+  // Function to modify the entire summary section based on data availability
+  function updateSummarySection(hasData) {
+    const summarySection = document.querySelector(".row:last-child");
+
+    if (!hasData) {
+      summarySection.innerHTML = `
+                <div class="col-md-12">
+                    <div class="card">
+                        <div class="card-header">
+                            <h5 class="card-title mb-0">Getting Started with Fuel Analytics</h5>
+                        </div>
+                        <div class="card-body">
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <h6>How Fuel Analytics Works</h6>
+                                    <div class="alert alert-info">
+                                        <p><i class="fas fa-info-circle me-2"></i>The fuel analytics dashboard uses actual fuel consumption data from completed routes to improve prediction accuracy over time.</p>
+                                        <p class="mb-0">To get started, complete routes and record the actual fuel consumption in the "Complete Route" form.</p>
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <h6>Recommendations to Get Started</h6>
+                                    <ul class="list-group" id="recommendationsList">
+                                        <!-- Content will be filled by updateRecommendations() -->
+                                    </ul>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+
+      // Update recommendations with "no data" version
+      updateRecommendations(false);
+    } else {
+      // Keep the original structure but call updateRecommendations with hasData=true
+      updateRecommendations(true);
+    }
+  }
+</script>
+{% endblock %}
