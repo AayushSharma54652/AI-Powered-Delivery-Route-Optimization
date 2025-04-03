@@ -2,7 +2,6 @@ from flask import Flask, render_template, request, jsonify, redirect, url_for, f
 from werkzeug.security import generate_password_hash, check_password_hash
 from functools import wraps
 import jwt
-from flask_sqlalchemy import SQLAlchemy
 import os
 import json
 from datetime import datetime, timedelta
@@ -17,11 +16,13 @@ from models.traffic_optimizer import optimize_routes_with_traffic
 from models.traffic_data import get_overpass_traffic_data
 from models.fuel_efficient_optimizer import optimize_routes_fuel_efficient
 from models.vehicle_model import get_vehicle_efficiency_data, calculate_co2_emissions
+from models.db_setup import db
 
 
 data_dir = os.path.join(os.path.dirname(__file__), 'data')
 if not os.path.exists(data_dir):
     os.makedirs(data_dir)
+
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'your-secret-key-goes-here' 
@@ -29,13 +30,14 @@ app.config['JWT_SECRET_KEY'] = 'your-jwt-secret-key-here'
 app.config['SQLALCHEMY_DATABASE_URI'] = f'sqlite:///{os.path.join(data_dir, "locations.db")}'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
-# Setup logging
-logging.basicConfig(level=logging.INFO, 
-                   format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-logger = logging.getLogger(__name__)
+db.init_app(app)
+
+# # Setup logging
+# logging.basicConfig(level=logging.INFO, 
+#                    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+# logger = logging.getLogger(__name__)
 
 
-db = SQLAlchemy(app)
 
 # Authentication helper functions
 def token_required(f):
@@ -128,7 +130,8 @@ class Driver(db.Model):
     is_active = db.Column(db.Boolean, default=True)
     last_login = db.Column(db.DateTime, nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    
+    last_known_latitude = db.Column(db.Float, nullable=True)
+    last_known_longitude = db.Column(db.Float, nullable=True)
     # Relationship with assigned routes
     assigned_routes = db.relationship('DriverRoute', back_populates='driver')
     
@@ -203,6 +206,9 @@ class DriverRoute(db.Model):
     
     # Relationship with delivery stops
     delivery_stops = db.relationship('DeliveryStop', back_populates='driver_route')
+    # Add to the DriverRoute class in app.py
+    is_transfer = db.Column(db.Boolean, default=False)
+    original_driver_route_id = db.Column(db.Integer, db.ForeignKey('driver_route.id'), nullable=True)
     
     def to_dict(self):
         return {
@@ -248,6 +254,21 @@ class DeliveryStop(db.Model):
             'time_window_start': self.location.time_window_start.strftime('%H:%M') if self.location.time_window_start else None,
             'time_window_end': self.location.time_window_end.strftime('%H:%M') if self.location.time_window_end else None
         }
+    
+from models.route_incident import RouteIncident
+from models.route_transfer import RouteTransfer
+from utils.notification_service import Notification, send_driver_notification, notify_admin
+from utils.route_transfer_optimizer import find_nearby_drivers, split_remaining_route, calculate_distance
+
+
+RouteIncident.driver = db.relationship('Driver', backref='reported_incidents')
+RouteIncident.driver_route = db.relationship('DriverRoute', backref='incidents')
+RouteIncident.transfers = db.relationship('RouteTransfer', backref='incident', lazy='dynamic')
+
+RouteTransfer.original_driver = db.relationship('Driver', foreign_keys=[RouteTransfer.original_driver_id], backref='transfers_out')
+RouteTransfer.new_driver = db.relationship('Driver', foreign_keys=[RouteTransfer.new_driver_id], backref='transfers_in')
+RouteTransfer.original_driver_route = db.relationship('DriverRoute', foreign_keys=[RouteTransfer.original_driver_route_id], backref='transfers_out')
+RouteTransfer.new_driver_route = db.relationship('DriverRoute', foreign_keys=[RouteTransfer.new_driver_route_id], backref='transfers_in')
 
 
 @app.route('/')
@@ -351,12 +372,25 @@ def upload_csv():
         db.session.commit()
         return redirect(url_for('dashboard'))
 
+
+# Enhanced multiple vehicle optimization for app.py
+# Replace the optimize_route function with this implementation
+
+
+
 @app.route('/optimize_route', methods=['POST'])
 def optimize_route():
+    """Optimized route calculator that properly handles multiple vehicles."""
     # Get form data
     depot_id = request.form.get('depot_id', type=int)
     vehicle_count = request.form.get('vehicle_count', type=int, default=1)
     max_distance = request.form.get('max_distance', type=float, default=None)
+    
+    # Validate inputs
+    if vehicle_count is None or vehicle_count < 1:
+        vehicle_count = 1
+    
+    print(f"Received request to optimize route with {vehicle_count} vehicles")
     
     # New parameter for traffic routing
     use_traffic = request.form.get('use_traffic', default='on') == 'on'
@@ -389,14 +423,43 @@ def optimize_route():
     if not depot:
         return "Depot location not found", 400
     
+    if not delivery_locations:
+        return "No delivery locations found", 400
+    
     # Calculate distance matrix
     coordinates = [{'lat': loc['latitude'], 'lng': loc['longitude']} for loc in [depot] + delivery_locations]
     distance_matrix = calculate_distance_matrix(coordinates)
     
-    # Optional: Cluster locations if there are multiple vehicles
+    # Enhanced: Generate vehicle data for each vehicle
+    vehicle_data = []
+    for i in range(vehicle_count):
+        vehicle_type = request.form.get(f'vehicle_type_{i}', 'van')
+        vehicle_data.append({
+            'id': i,
+            'type': vehicle_type,
+            # Get other vehicle properties from the form or use defaults
+            'weight': 2500 if vehicle_type == 'van' else (1500 if vehicle_type == 'car' else 7500),
+            'capacity': 8 if vehicle_type == 'van' else (2 if vehicle_type == 'car' else 30),
+        })
+    
+    # Enhanced: Properly cluster locations for multiple vehicles
     clusters = None
     if vehicle_count > 1:
-        clusters = cluster_locations([depot] + delivery_locations, vehicle_count)
+        try:
+            print(f"Clustering {len(delivery_locations)} locations into {vehicle_count} clusters")
+            # The enhanced cluster_locations function considers time windows and spatial distribution
+            clusters = cluster_locations([depot] + delivery_locations, vehicle_count)
+            
+            # Apply balancing to improve cluster quality
+            clusters = balance_clusters(clusters, [depot] + delivery_locations, distance_matrix)
+            
+            print(f"Created {len(clusters)} clusters:")
+            for i, cluster in enumerate(clusters):
+                cluster_locs = [delivery_locations[idx-1]['name'] for idx in cluster if idx-1 < len(delivery_locations)]
+                print(f"  Cluster {i+1}: {len(cluster)} locations - {', '.join(cluster_locs)}")
+        except Exception as e:
+            print(f"Error in clustering: {e}")
+            clusters = None
     
     # Optimize routes with or without traffic
     if use_traffic:
@@ -407,7 +470,8 @@ def optimize_route():
             distance_matrix=distance_matrix,
             vehicle_count=vehicle_count,
             max_distance=max_distance,
-            clusters=clusters
+            clusters=clusters,
+            vehicle_data=vehicle_data  # Pass vehicle data to optimization
         )
         
         # Store traffic info with the route
@@ -420,9 +484,44 @@ def optimize_route():
             distance_matrix=distance_matrix,
             vehicle_count=vehicle_count,
             max_distance=max_distance,
-            clusters=clusters
+            clusters=clusters,
+            vehicle_data=vehicle_data  # Pass vehicle data to optimization
         )
         traffic_data_json = "{}"
+    
+    # Check if we got expected number of routes
+    if len(routes) < vehicle_count:
+        print(f"Warning: Requested {vehicle_count} vehicles but only got {len(routes)} routes")
+        # Ensure we have a route for each vehicle
+        while len(routes) < vehicle_count:
+            # Create an empty route for the missing vehicle
+            empty_route = {
+                'vehicle_id': len(routes),
+                'vehicle_type': vehicle_data[len(routes)]['type'] if len(routes) < len(vehicle_data) else 'van',
+                'stops': [
+                    # Start at depot
+                    {
+                        'id': depot['id'],
+                        'name': depot['name'],
+                        'latitude': depot['latitude'],
+                        'longitude': depot['longitude'],
+                        'is_depot': True
+                    },
+                    # End at depot
+                    {
+                        'id': depot['id'],
+                        'name': depot['name'],
+                        'latitude': depot['latitude'],
+                        'longitude': depot['longitude'],
+                        'is_depot': True
+                    }
+                ],
+                'total_distance': 0,
+                'total_time': 0,
+                'total_fuel': 0,
+                'fuel_saved': 0
+            }
+            routes.append(empty_route)
     
     # Save route to database
     route_name = f"Route {datetime.now().strftime('%Y-%m-%d %H:%M')}"
@@ -441,11 +540,13 @@ def optimize_route():
 
     print("ROUTE DATA:", routes)
     for route in routes:
-        print(f"Vehicle {route['vehicle_id']} has {len(route['stops'])} stops")
+        print(f"Vehicle {route['vehicle_id']} ({route.get('vehicle_type', 'van')}) has {len(route['stops'])} stops")
         for stop in route['stops']:
             print(f"  - {stop['name']} at {stop['latitude']}, {stop['longitude']}")
     
     return redirect(url_for('view_route', route_id=new_route.id))
+
+
 
 
 # Update the view_route function in app.py
@@ -1325,6 +1426,651 @@ def get_driver_efficiency():
 def fuel_analytics_dashboard():
     """View the fuel efficiency analytics dashboard."""
     return render_template('fuel_analytics.html')
+
+
+
+# Report an incident during route execution
+@app.route('/api/driver/incidents', methods=['POST'])
+@token_required
+def report_incident(current_driver):
+    data = request.get_json()
+    
+    # Validate request
+    if not data or not data.get('driver_route_id') or not data.get('incident_type'):
+        return jsonify({'message': 'Missing required fields'}), 400
+    
+    # Check if the driver_route belongs to the current driver
+    driver_route = DriverRoute.query.filter_by(
+        id=data['driver_route_id'], 
+        driver_id=current_driver.id
+    ).first()
+    
+    if not driver_route:
+        return jsonify({'message': 'Driver route not found'}), 404
+    
+    # Create incident record
+    incident = RouteIncident(
+        driver_route_id=driver_route.id,
+        driver_id=current_driver.id,
+        incident_type=data['incident_type'],
+        description=data.get('description', ''),
+        location_lat=data.get('location_lat', 0),
+        location_lng=data.get('location_lng', 0),
+        location_address=data.get('location_address', '')
+    )
+    
+    db.session.add(incident)
+    db.session.commit()
+    
+    # Get pending/incomplete delivery stops
+    pending_stops = DeliveryStop.query.filter_by(
+        driver_route_id=driver_route.id
+    ).filter(
+        DeliveryStop.status.in_(['pending', 'arrived'])
+    ).all()
+    
+    # Find nearby drivers who could assist
+    if len(pending_stops) > 0:
+        # Import calculate_remaining_capacity locally to avoid circular imports
+        def calculate_remaining_capacity(stops):
+            """Calculate the remaining capacity needed for undelivered stops."""
+            return len(stops) * 0.1  # Simple calculation based on stop count
+        
+            # Define a local find_nearby_drivers function to avoid circular imports
+        def local_find_nearby_drivers(lat, lng, exclude_driver_id=None, needed_vehicle_type=None, radius_km=20):
+            """Local version to avoid circular imports"""
+            # Find active drivers 
+            now = datetime.utcnow()
+            threshold = now - timedelta(minutes=30)  # Last 30 minutes - fixed to use timedelta
+            
+            query = Driver.query.filter(
+                Driver.is_active == True,
+                Driver.last_login > threshold
+            )
+            
+            if exclude_driver_id:
+                query = query.filter(Driver.id != exclude_driver_id)
+            
+            # Filter based on vehicle type if needed
+            if needed_vehicle_type:
+                query = query.join(Driver.vehicle).filter(
+                    Vehicle.vehicle_type == needed_vehicle_type
+                )
+            
+            potential_drivers = query.all()
+            
+            # Filter by distance (if lat/lng is available)
+            nearby_drivers = []
+            for driver in potential_drivers:
+                if driver.last_known_latitude and driver.last_known_longitude:
+                    distance = calculate_distance(
+                        lat1=lat, 
+                        lng1=lng, 
+                        lat2=driver.last_known_latitude, 
+                        lng2=driver.last_known_longitude
+                    )
+                    
+                    if distance <= radius_km:
+                        driver.distance_km = distance
+                        nearby_drivers.append(driver)
+            
+            # Sort by distance
+            nearby_drivers.sort(key=lambda d: getattr(d, 'distance_km', float('inf')))
+            
+            return nearby_drivers
+        # Define a local calculate_distance function to avoid circular imports
+        def calculate_distance(lat1, lng1, lat2, lng2):
+            """Calculate the great circle distance between two points on earth."""
+            import math
+            # Convert decimal degrees to radians
+            lat1, lng1, lat2, lng2 = map(math.radians, [lat1, lng1, lat2, lng2])
+            
+            # Haversine formula
+            dlat = lat2 - lat1
+            dlng = lng2 - lng1
+            a = math.sin(dlat/2)**2 + math.cos(lat1) * math.cos(lat2) * math.sin(dlng/2)**2
+            c = 2 * math.asin(math.sqrt(a))
+            r = 6371  # Radius of earth in kilometers
+            
+            return c * r
+            
+        # Find nearby drivers who could assist using our local function
+        nearby_drivers = local_find_nearby_drivers(
+            lat=incident.location_lat, 
+            lng=incident.location_lng,
+            exclude_driver_id=current_driver.id,
+            needed_vehicle_type=current_driver.vehicle.vehicle_type if current_driver.vehicle else None
+        )
+        
+        # Create route transfer record if nearby drivers are available
+        if nearby_drivers:
+            # Calculate optimal transfer based on remaining stops
+            transfer = RouteTransfer(
+                incident_id=incident.id,
+                original_driver_id=current_driver.id,
+                original_driver_route_id=driver_route.id,
+                stop_ids=json.dumps([stop.id for stop in pending_stops]),
+                vehicle_type_required=current_driver.vehicle.vehicle_type if current_driver.vehicle else None,
+                min_capacity_required=calculate_remaining_capacity(pending_stops)
+            )
+            
+            db.session.add(transfer)
+            db.session.commit()
+            
+            # Notify nearby drivers and admin
+            for driver in nearby_drivers:
+                send_driver_notification(
+                    driver_id=driver.id,
+                    notification_type='assistance_needed',
+                    data={
+                        'incident_id': incident.id,
+                        'transfer_id': transfer.id,
+                        'stops_count': len(pending_stops),
+                        'location': {
+                            'lat': incident.location_lat,
+                            'lng': incident.location_lng,
+                            'address': incident.location_address
+                        }
+                    }
+                )
+            
+            # Notify admin about the incident
+            notify_admin(
+                notification_type='incident_reported',
+                data=incident.to_dict()
+            )
+    
+    return jsonify({
+        'message': 'Incident reported successfully',
+        'incident': incident.to_dict(),
+        'pending_stops': len(pending_stops)
+    }), 201
+
+
+
+# Get available assistance requests (for other drivers to see)
+@app.route('/api/driver/assistance-requests', methods=['GET'])
+@token_required
+def get_assistance_requests(current_driver):
+    # Find transfer requests that this driver could potentially help with
+    transfers = db.session.query(RouteTransfer).join(
+        RouteIncident, RouteIncident.id == RouteTransfer.incident_id
+    ).filter(
+        RouteTransfer.transfer_status == 'pending',
+        RouteTransfer.new_driver_id.is_(None)  # Not yet assigned
+    ).all()
+    
+    # Filter based on vehicle compatibility
+    compatible_transfers = []
+    for transfer in transfers:
+        # Skip if this is the driver who needs help
+        if transfer.original_driver_id == current_driver.id:
+            continue
+            
+        # Check if this driver has a compatible vehicle
+        is_compatible = True
+        if current_driver.vehicle and transfer.vehicle_type_required:
+            if current_driver.vehicle.vehicle_type != transfer.vehicle_type_required:
+                is_compatible = False
+                
+        if is_compatible:
+            # Calculate distance to incident
+            incident = transfer.incident
+            distance = calculate_distance(
+                lat1=current_driver.last_known_latitude,
+                lng1=current_driver.last_known_longitude,
+                lat2=incident.location_lat,
+                lng2=incident.location_lng
+            ) if current_driver.last_known_latitude else None
+            
+            transfer_dict = transfer.to_dict()
+            transfer_dict['distance_km'] = distance
+            compatible_transfers.append(transfer_dict)
+    
+    return jsonify(compatible_transfers), 200
+
+# Accept a route transfer
+@app.route('/api/driver/transfers/<int:transfer_id>/accept', methods=['POST'])
+@token_required
+def accept_transfer(current_driver, transfer_id):
+    # Find the transfer
+    transfer = RouteTransfer.query.get_or_404(transfer_id)
+    
+    # Check if transfer is still available
+    if transfer.transfer_status != 'pending' or transfer.new_driver_id is not None:
+        return jsonify({'message': 'This transfer is no longer available'}), 400
+    
+    # Check if driver has active route
+    active_route = DriverRoute.query.filter_by(
+        driver_id=current_driver.id,
+        status='in_progress'
+    ).first()
+    
+    # Create a new driver route for the transferred stops
+    route = Route.query.get(transfer.original_driver_route.route_id)
+    
+    new_driver_route = DriverRoute(
+        driver_id=current_driver.id,
+        route_id=route.id,
+        status='in_progress',
+        started_at=datetime.utcnow(),
+        is_transfer=True,
+        original_driver_route_id=transfer.original_driver_route_id
+    )
+    
+    db.session.add(new_driver_route)
+    db.session.flush()  # Get ID without committing
+    
+    # Update the transfer
+    transfer.new_driver_id = current_driver.id
+    transfer.new_driver_route_id = new_driver_route.id
+    transfer.transfer_status = 'accepted'
+    transfer.transfer_accepted_at = datetime.utcnow()
+    
+    # Transfer the delivery stops
+    stop_ids = transfer.stop_id_list
+    for stop_id in stop_ids:
+        stop = DeliveryStop.query.get(stop_id)
+        if stop:
+            # Create a copy of the stop for the new driver
+            new_stop = DeliveryStop(
+                driver_route_id=new_driver_route.id,
+                location_id=stop.location_id,
+                stop_number=stop.stop_number,
+                planned_arrival_time=stop.planned_arrival_time,
+                status='pending',
+                original_stop_id=stop.id
+            )
+            db.session.add(new_stop)
+            
+            # Update original stop status
+            stop.status = 'transferred'
+            stop.completion_notes = f"Transferred to driver {current_driver.id} due to incident"
+    
+    # Update incident status
+    incident = transfer.incident
+    incident.status = 'assistance_assigned'
+    
+    db.session.commit()
+    
+    # Notify the original driver that help is on the way
+    send_driver_notification(
+        driver_id=transfer.original_driver_id,
+        notification_type='assistance_assigned',
+        data={
+            'helper_driver_name': f"{current_driver.first_name} {current_driver.last_name}",
+            'helper_vehicle': current_driver.vehicle.name if current_driver.vehicle else 'Unknown',
+            'stops_count': len(stop_ids)
+        }
+    )
+    
+    return jsonify({
+        'message': 'Transfer accepted successfully',
+        'transfer': transfer.to_dict(),
+        'new_route_id': new_driver_route.id
+    }), 200
+
+# Get pending incident status (for original driver)
+@app.route('/api/driver/incidents/active', methods=['GET'])
+@token_required
+def get_active_incidents(current_driver):
+    active_incidents = RouteIncident.query.filter_by(
+        driver_id=current_driver.id,
+        status='reported'
+    ).order_by(RouteIncident.reported_at.desc()).all()
+    
+    incident_data = []
+    for incident in active_incidents:
+        data = incident.to_dict()
+        
+        # Add transfer status information
+        transfers = RouteTransfer.query.filter_by(incident_id=incident.id).all()
+        transfer_status = 'pending'
+        helper_info = None
+        
+        for transfer in transfers:
+            if transfer.transfer_status == 'accepted':
+                transfer_status = 'accepted'
+                helper_info = {
+                    'driver_name': f"{transfer.new_driver.first_name} {transfer.new_driver.last_name}",
+                    'vehicle': transfer.new_driver.vehicle.name if transfer.new_driver.vehicle else None,
+                    'stops_count': len(transfer.stop_id_list),
+                    'accepted_at': transfer.transfer_accepted_at.isoformat() if transfer.transfer_accepted_at else None
+                }
+                break
+        
+        data['help_status'] = transfer_status
+        data['helper_info'] = helper_info
+        incident_data.append(data)
+    
+    return jsonify(incident_data), 200
+
+# Cancel an incident (if resolved without assistance)
+@app.route('/api/driver/incidents/<int:incident_id>/cancel', methods=['POST'])
+@token_required
+def cancel_incident(current_driver, incident_id):
+    incident = RouteIncident.query.get_or_404(incident_id)
+    
+    # Verify ownership
+    if incident.driver_id != current_driver.id:
+        return jsonify({'message': 'Unauthorized access to this incident'}), 403
+    
+    # Cancel all pending transfers
+    pending_transfers = RouteTransfer.query.filter_by(
+        incident_id=incident.id,
+        transfer_status='pending'
+    ).all()
+    
+    for transfer in pending_transfers:
+        transfer.transfer_status = 'cancelled'
+    
+    # Update incident status
+    incident.status = 'resolved'
+    incident.resolved_at = datetime.utcnow()
+    
+    db.session.commit()
+    
+    return jsonify({
+        'message': 'Incident cancelled successfully',
+        'incident': incident.to_dict()
+    }), 200
+
+# Utility function to calculate remaining capacity needed
+def calculate_remaining_capacity(stops):
+    return len(stops) * 0.1  
+
+
+
+# Admin endpoint to get all incidents
+@app.route('/api/admin/incidents', methods=['GET'])
+def admin_get_incidents():
+    # Get all incidents, most recent first
+    incidents = RouteIncident.query.order_by(RouteIncident.reported_at.desc()).all()
+    
+    # Get counts for dashboard
+    active_count = RouteIncident.query.filter(RouteIncident.status != 'resolved').count()
+    pending_transfers = RouteTransfer.query.filter_by(transfer_status='pending').count()
+    
+    # Get available drivers count (simplified)
+    available_drivers = Driver.query.filter_by(is_active=True).count()
+    
+    return jsonify({
+        'incidents': [incident.to_dict() for incident in incidents],
+        'counts': {
+            'active': active_count,
+            'pending_transfers': pending_transfers,
+            'available_drivers': available_drivers
+        }
+    }), 200
+
+# Admin endpoint to get available drivers for an incident
+@app.route('/api/admin/incidents/<int:incident_id>/available-drivers', methods=['GET'])
+def admin_get_available_drivers(incident_id):
+    # Find the incident
+    incident = RouteIncident.query.get_or_404(incident_id)
+    
+    # Find available drivers
+    available_drivers = find_nearby_drivers(
+        lat=incident.location_lat,
+        lng=incident.location_lng,
+        exclude_driver_id=incident.driver_id,
+        radius_km=50  # Larger radius for admin assignment
+    )
+    
+    # Format driver data
+    driver_data = []
+    for driver in available_drivers:
+        driver_data.append({
+            'id': driver.id,
+            'name': f"{driver.first_name} {driver.last_name}",
+            'vehicle': driver.vehicle.name if driver.vehicle else None,
+            'distance_km': getattr(driver, 'distance_km', 0)
+        })
+    
+    return jsonify(driver_data), 200
+
+# Admin endpoint to assign a driver to an incident
+@app.route('/api/admin/incidents/<int:incident_id>/assign-driver', methods=['POST'])
+def admin_assign_driver(incident_id):
+    data = request.get_json()
+    
+    if not data or not data.get('driver_id'):
+        return jsonify({'message': 'Driver ID is required'}), 400
+    
+    # Find the incident
+    incident = RouteIncident.query.get_or_404(incident_id)
+    
+    # Find pending transfers
+    pending_transfer = RouteTransfer.query.filter_by(
+        incident_id=incident_id,
+        transfer_status='pending'
+    ).first()
+    
+    if not pending_transfer:
+        return jsonify({'message': 'No pending transfers found for this incident'}), 404
+    
+    # Find the driver
+    driver = Driver.query.get_or_404(data['driver_id'])
+    
+    # Create a new driver route for the assigned driver
+    original_driver_route = pending_transfer.original_driver_route
+    route = Route.query.get(original_driver_route.route_id)
+    
+    new_driver_route = DriverRoute(
+        driver_id=driver.id,
+        route_id=route.id,
+        status='in_progress',
+        started_at=datetime.utcnow(),
+        is_transfer=True,
+        original_driver_route_id=original_driver_route.id
+    )
+    
+    db.session.add(new_driver_route)
+    db.session.flush()  # Get ID without committing
+    
+    # Update the transfer
+    pending_transfer.new_driver_id = driver.id
+    pending_transfer.new_driver_route_id = new_driver_route.id
+    pending_transfer.transfer_status = 'accepted'
+    pending_transfer.transfer_accepted_at = datetime.utcnow()
+    
+    # Transfer the delivery stops
+    stop_ids = pending_transfer.stop_id_list
+    for stop_id in stop_ids:
+        stop = DeliveryStop.query.get(stop_id)
+        if stop:
+            # Create a copy of the stop for the new driver
+            new_stop = DeliveryStop(
+                driver_route_id=new_driver_route.id,
+                location_id=stop.location_id,
+                stop_number=stop.stop_number,
+                planned_arrival_time=stop.planned_arrival_time,
+                status='pending',
+                original_stop_id=stop.id
+            )
+            db.session.add(new_stop)
+            
+            # Update original stop status
+            stop.status = 'transferred'
+            stop.completion_notes = f"Transferred to driver {driver.id} by admin"
+    
+    # Update incident status
+    incident.status = 'assistance_assigned'
+    
+    db.session.commit()
+    
+    # Notify the original driver that help is on the way
+    send_driver_notification(
+        driver_id=incident.driver_id,
+        notification_type='assistance_assigned',
+        data={
+            'helper_driver_name': f"{driver.first_name} {driver.last_name}",
+            'helper_vehicle': driver.vehicle.name if driver.vehicle else 'Unknown',
+            'stops_count': len(stop_ids)
+        }
+    )
+    
+    # Notify the assigned driver
+    send_driver_notification(
+        driver_id=driver.id,
+        notification_type='assignment_received',
+        data={
+            'incident_id': incident.id,
+            'transfer_id': pending_transfer.id,
+            'stops_count': len(stop_ids),
+            'location': {
+                'lat': incident.location_lat,
+                'lng': incident.location_lng,
+                'address': incident.location_address
+            }
+        }
+    )
+    
+    return jsonify({
+        'message': 'Driver assigned successfully',
+        'transfer': pending_transfer.to_dict()
+    }), 200
+
+# Admin endpoint to resolve an incident
+@app.route('/api/admin/incidents/<int:incident_id>/resolve', methods=['POST'])
+def admin_resolve_incident(incident_id):
+    # Find the incident
+    incident = RouteIncident.query.get_or_404(incident_id)
+    
+    # Update incident status
+    incident.status = 'resolved'
+    incident.resolved_at = datetime.utcnow()
+    
+    # Cancel any pending transfers
+    pending_transfers = RouteTransfer.query.filter_by(
+        incident_id=incident_id,
+        transfer_status='pending'
+    ).all()
+    
+    for transfer in pending_transfers:
+        transfer.transfer_status = 'cancelled'
+    
+    db.session.commit()
+    
+    return jsonify({
+        'message': 'Incident resolved successfully',
+        'incident': incident.to_dict()
+    }), 200
+
+# Admin incidents dashboard route
+@app.route('/admin/incidents')
+def admin_incidents_dashboard():
+    return render_template('admin_incidents.html')
+
+
+# Get notifications endpoint (for both drivers and admins)
+@app.route('/api/notifications', methods=['GET'])
+def get_notifications():
+    # Get user type and ID from token or session (simplified)
+    user_type = request.args.get('user_type', 'admin')
+    user_id = request.args.get('user_id', 1)  # Default to admin ID 1
+    
+    # Check for token (for drivers)
+    token = request.headers.get('Authorization', '').replace('Bearer ', '')
+    if token:
+        try:
+            data = jwt.decode(token, app.config['JWT_SECRET_KEY'], algorithms=["HS256"])
+            user_type = 'driver'
+            user_id = data.get('id')
+        except:
+            pass
+    
+    # Get notifications for this user
+    notifications = Notification.query.filter_by(
+        recipient_type=user_type,
+        recipient_id=user_id
+    ).order_by(Notification.created_at.desc()).limit(10).all()
+    
+    # Count unread notifications
+    unread_count = Notification.query.filter_by(
+        recipient_type=user_type,
+        recipient_id=user_id,
+        is_read=False
+    ).count()
+    
+    return jsonify({
+        'notifications': [n.to_dict() for n in notifications],
+        'unread_count': unread_count
+    }), 200
+
+# Mark notification as read
+@app.route('/api/notifications/<int:notification_id>/read', methods=['POST'])
+def mark_notification_as_read(notification_id):
+    notification = Notification.query.get_or_404(notification_id)
+    
+    # In a real system, verify the notification belongs to the current user
+    
+    notification.is_read = True
+    notification.read_at = datetime.utcnow()
+    db.session.commit()
+    
+    return jsonify({
+        'message': 'Notification marked as read',
+        'notification': notification.to_dict()
+    }), 200
+
+# Mark all notifications as read
+@app.route('/api/notifications/read-all', methods=['POST'])
+def mark_all_notifications_as_read():
+    # Get user type and ID (simplified)
+    user_type = request.args.get('user_type', 'admin')
+    user_id = request.args.get('user_id', 1)  # Default to admin ID 1
+    
+    # Check for token (for drivers)
+    token = request.headers.get('Authorization', '').replace('Bearer ', '')
+    if token:
+        try:
+            data = jwt.decode(token, app.config['JWT_SECRET_KEY'], algorithms=["HS256"])
+            user_type = 'driver'
+            user_id = data.get('id')
+        except:
+            pass
+    
+    # Mark all notifications as read
+    notifications = Notification.query.filter_by(
+        recipient_type=user_type,
+        recipient_id=user_id,
+        is_read=False
+    ).all()
+    
+    for notification in notifications:
+        notification.is_read = True
+        notification.read_at = datetime.utcnow()
+    
+    db.session.commit()
+    
+    return jsonify({
+        'message': 'All notifications marked as read',
+        'count': len(notifications)
+    }), 200
+
+
+@app.route('/api/driver/update-location', methods=['POST'])
+@token_required
+def update_driver_location(current_driver):
+    data = request.get_json()
+    
+    if not data or 'latitude' not in data or 'longitude' not in data:
+        return jsonify({'message': 'Latitude and longitude are required'}), 400
+    
+    # Update driver location
+    current_driver.last_known_latitude = data['latitude']
+    current_driver.last_known_longitude = data['longitude']
+    db.session.commit()
+    
+    return jsonify({
+        'message': 'Location updated successfully',
+        'location': {
+            'latitude': current_driver.last_known_latitude,
+            'longitude': current_driver.last_known_longitude
+        }
+    }), 200
+
 
 
 if __name__ == '__main__':

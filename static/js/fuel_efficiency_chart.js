@@ -7,11 +7,18 @@ function initFuelEfficiencyChart(routeData) {
     // Check if we have the required data
     if (!routeData || routeData.length === 0) return;
     
+    // Check if charts have already been initialized
+    if (document.querySelector('#fuel-efficiency-chart-container canvas') || 
+        document.querySelector('#fuel-by-road-chart') || 
+        document.querySelector('#fuel-saving-factors-chart')) {
+        return;
+    }
+    
     // Create a container for the chart if it doesn't exist
     let chartContainer = document.getElementById('fuel-efficiency-chart');
     if (!chartContainer) {
-        // Find the route summary card
-        const routeSummaryCard = document.querySelector('.card-header:contains("Route Summary")').closest('.card');
+        // Find the route summary card - using proper vanilla JS selector
+        const routeSummaryCard = findCardWithTitle("Route Summary");
         if (!routeSummaryCard) return;
         
         // Create and append the chart container
@@ -32,7 +39,7 @@ function initFuelEfficiencyChart(routeData) {
         `;
         
         // Insert after the route summary card
-        routeSummaryCard.after(chartCard);
+        routeSummaryCard.parentNode.insertBefore(chartCard, routeSummaryCard.nextSibling);
         chartContainer = document.getElementById('fuel-efficiency-chart-container');
     }
     
@@ -166,9 +173,14 @@ function initFuelEfficiencyChart(routeData) {
     chartContainer.after(summaryDiv);
 }
 
-// Create a fuel consumption breakdown by road type
 function createFuelBreakdownChart(routeData) {
     if (!routeData || routeData.length === 0) return;
+    
+    // Check if charts have already been initialized
+    if (document.querySelector('#fuel-by-road-chart') || 
+        document.querySelector('#fuel-saving-factors-chart')) {
+        return;
+    }
     
     // Create container
     const container = document.createElement('div');
@@ -215,10 +227,13 @@ function createFuelBreakdownChart(routeData) {
     // Find the element to insert before
     const targetElement = document.querySelector('#routeAccordion');
     if (targetElement) {
-        targetElement.before(container);
+        targetElement.parentNode.insertBefore(container, targetElement);
     } else {
         // Fallback to appending to a common container
-        document.querySelector('.col-md-4').appendChild(container);
+        const fallbackContainer = document.querySelector('.col-md-4');
+        if (fallbackContainer) {
+            fallbackContainer.appendChild(container);
+        }
     }
     
     // Simulate data for the charts
@@ -266,43 +281,72 @@ function createFuelBreakdownChart(routeData) {
         }]
     };
     
-    // Create the charts
-    new Chart(document.getElementById('fuel-by-road-chart'), {
-        type: 'pie',
-        data: roadTypeData,
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: {
-                title: {
-                    display: true,
-                    text: 'Fuel by Road Type'
+    // Create the charts after a short delay to ensure elements exist
+    setTimeout(() => {
+        const roadChartCanvas = document.getElementById('fuel-by-road-chart');
+        const factorsChartCanvas = document.getElementById('fuel-saving-factors-chart');
+        
+        if (roadChartCanvas) {
+            new Chart(roadChartCanvas, {
+                type: 'pie',
+                data: roadTypeData,
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        title: {
+                            display: true,
+                            text: 'Fuel by Road Type'
+                        }
+                    }
                 }
-            }
+            });
         }
-    });
+        
+        if (factorsChartCanvas) {
+            new Chart(factorsChartCanvas, {
+                type: 'doughnut',
+                data: fuelSavingFactors,
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        title: {
+                            display: true,
+                            text: 'Fuel Saving Factors'
+                        }
+                    }
+                }
+            });
+        }
+    }, 100);
+}
+
+// Helper function to find a card with a specific title text
+function findCardWithTitle(titleText) {
+    // Get all card headers
+    const cardHeaders = document.querySelectorAll('.card-header');
     
-    new Chart(document.getElementById('fuel-saving-factors-chart'), {
-        type: 'doughnut',
-        data: fuelSavingFactors,
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: {
-                title: {
-                    display: true,
-                    text: 'Fuel Saving Factors'
-                }
-            }
+    // Loop through them to find the one with the title text
+    for (let header of cardHeaders) {
+        const titleElement = header.querySelector('.card-title');
+        if (titleElement && titleElement.textContent.includes(titleText)) {
+            return header.closest('.card');
         }
-    });
+    }
+    
+    // Return the first card as fallback
+    return document.querySelector('.card');
 }
 
 // Initialize after the page loads
 document.addEventListener('DOMContentLoaded', function() {
-    // Wait for routes data to be available
-    if (typeof routeData !== 'undefined') {
-        initFuelEfficiencyChart(routeData);
-        createFuelBreakdownChart(routeData);
-    }
+    // Wait a moment to ensure the route data is loaded
+    setTimeout(() => {
+        // Check if routes data is available
+        if (typeof routeData !== 'undefined') {
+            initFuelEfficiencyChart(routeData);
+            createFuelBreakdownChart(routeData);
+        }
+    }, 500);
 });

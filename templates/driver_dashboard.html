@@ -55,6 +55,16 @@
         border-radius: 10px;
     }
     
+    .assistance-alert-container {
+        animation: pulse-bg 2s infinite;
+    }
+    
+    @keyframes pulse-bg {
+        0% { background-color: #dc3545; }
+        50% { background-color: #e74c3c; }
+        100% { background-color: #dc3545; }
+    }
+    
     @media (max-width: 768px) {
         .container-fluid {
             padding-left: 10px;
@@ -121,6 +131,20 @@
                     <div id="active-route-info">
                         <!-- Active route information will be displayed here -->
                     </div>
+                </div>
+            </div>
+            
+            <div id="assistance-requests-panel" class="card mb-4 d-none">
+                <div class="card-header bg-warning text-dark">
+                    <h5 class="card-title mb-0">
+                        <i class="fas fa-exclamation-triangle me-1"></i> Assistance Requests
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <div id="assistance-requests-count" class="mb-2"></div>
+                    <button class="btn btn-primary w-100" data-bs-toggle="modal" data-bs-target="#assistanceRequestsModal">
+                        <i class="fas fa-hands-helping me-1"></i> View Requests
+                    </button>
                 </div>
             </div>
         </div>
@@ -530,6 +554,122 @@
         bsToast.show();
     }
     
+    // Add function to check for assistance requests
+    function checkAssistanceRequests() {
+        fetch('/api/driver/assistance-requests', {
+            headers: {
+                'Authorization': 'Bearer ' + getToken()
+            }
+        })
+        .then(response => {
+            if (!response.ok) {
+                throw new Error('Failed to check assistance requests');
+            }
+            return response.json();
+        })
+        .then(data => {
+            if (data && data.length > 0) {
+                // Remove existing alert if present
+                const existingAlert = document.querySelector('.assistance-alert-container');
+                if (existingAlert) {
+                    existingAlert.remove();
+                }
+                
+                // Show a prominent alert at the top of the dashboard
+                const alertContainer = document.createElement('div');
+                alertContainer.className = 'assistance-alert-container alert alert-danger mb-4';
+                alertContainer.innerHTML = `
+                    <div class="d-flex align-items-center">
+                        <div class="flex-shrink-0 me-3">
+                            <i class="fas fa-exclamation-triangle fa-2x"></i>
+                        </div>
+                        <div class="flex-grow-1">
+                            <h5 class="alert-heading mb-1">Drivers Need Assistance!</h5>
+                            <p class="mb-0">${data.length} drivers nearby need your help with their routes.</p>
+                        </div>
+                        <div class="flex-shrink-0">
+                            <button class="btn btn-light" data-bs-toggle="modal" data-bs-target="#assistanceRequestsModal">
+                                View Requests
+                            </button>
+                        </div>
+                    </div>
+                `;
+                
+                // Insert at the top of the content
+                const contentContainer = document.querySelector('.container-fluid');
+                contentContainer.insertBefore(alertContainer, contentContainer.firstChild);
+                
+                // Update sidebar assistance panel
+                const assistancePanel = document.getElementById('assistance-requests-panel');
+                assistancePanel.classList.remove('d-none');
+                document.getElementById('assistance-requests-count').textContent = 
+                    `${data.length} driver${data.length > 1 ? 's' : ''} need${data.length === 1 ? 's' : ''} assistance`;
+            } else {
+                // Hide the panel if no requests
+                document.getElementById('assistance-requests-panel').classList.add('d-none');
+                
+                // Remove alert if it exists
+                const existingAlert = document.querySelector('.assistance-alert-container');
+                if (existingAlert) {
+                    existingAlert.remove();
+                }
+            }
+        })
+        .catch(error => {
+            console.error('Error checking assistance requests:', error);
+        });
+    }
+    
+    // Function to accept assistance request
+    function acceptAssistanceRequest(transferId) {
+        if (!confirm('Are you sure you want to help with this route? This will add additional stops to your current route.')) {
+            return;
+        }
+        
+        // Get button and disable it
+        const button = document.querySelector(`button[data-transfer-id="${transferId}"]`);
+        if (button) {
+            button.disabled = true;
+            button.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Accepting...';
+        }
+        
+        fetch(`/api/driver/transfers/${transferId}/accept`, {
+            method: 'POST',
+            headers: {
+                'Authorization': 'Bearer ' + getToken()
+            }
+        })
+        .then(response => {
+            if (!response.ok) {
+                throw new Error('Failed to accept transfer');
+            }
+            return response.json();
+        })
+        .then(data => {
+            // Hide modal
+            const modal = bootstrap.Modal.getInstance(document.getElementById('assistanceRequestsModal'));
+            if (modal) modal.hide();
+            
+            // Show success message
+            showToast(`You've accepted ${data.transfer.stop_count} additional stops. Refreshing route data...`, 'success');
+            
+            // Reload route data to get new stops
+            setTimeout(() => {
+                loadDriverRoutes();
+            }, 1500);
+        })
+        .catch(error => {
+            console.error('Error accepting assistance request:', error);
+            showToast('Failed to accept assistance request', 'danger');
+            
+            // Re-enable button
+            if (button) {
+                button.disabled = false;
+                button.innerHTML = '<i class="fas fa-check me-1"></i>I Can Help';
+            }
+        });
+    }
+    
     // Initialize when DOM is loaded
     document.addEventListener('DOMContentLoaded', function() {
         // Setup logout button
@@ -544,10 +684,14 @@
         // Load driver profile and routes
         loadDriverProfile();
         
-        // Refresh data every 2 minutes
+        // Check for assistance requests
+        checkAssistanceRequests();
+        
+        // Refresh data periodically
         setInterval(() => {
             loadDriverRoutes();
-        }, 120000);
+            checkAssistanceRequests();
+        }, 60000); // Every minute
     });
-    </script>
-{% endblock %}  
+</script>
+{% endblock %}

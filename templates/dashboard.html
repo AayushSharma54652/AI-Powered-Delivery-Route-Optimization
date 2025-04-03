@@ -139,7 +139,7 @@
           <h5 class="card-title mb-0">Optimize Route</h5>
         </div>
         <div class="card-body">
-          <form action="{{ url_for('optimize_route_fuel_efficient') }}" method="post">
+          <form action="{{ url_for('optimize_route_fuel_efficient') }}" method="post" id="optimize-form">
             <div class="mb-3">
               <label for="depot_id" class="form-label">Depot Location</label>
               <select
@@ -156,19 +156,30 @@
                 {% endfor %}
               </select>
             </div>
+            
+            <!-- UPDATED: Improved Vehicle Count Input -->
             <div class="mb-3">
-              <label for="vehicle_count" class="form-label"
-                >Number of Vehicles</label
-              >
-              <input
-                type="number"
-                class="form-control"
-                id="vehicle_count"
-                name="vehicle_count"
-                min="1"
-                value="1"
-              />
+              <label for="vehicle_count" class="form-label">Number of Vehicles</label>
+              <div class="input-group">
+                <input
+                  type="number"
+                  class="form-control"
+                  id="vehicle_count"
+                  name="vehicle_count"
+                  min="1"
+                  value="1"
+                  required
+                />
+                <button type="button" class="btn btn-outline-secondary" onclick="document.getElementById('vehicle_count').stepDown(); updateVehicleSelection();">
+                  <i class="fas fa-minus"></i>
+                </button>
+                <button type="button" class="btn btn-outline-secondary" onclick="document.getElementById('vehicle_count').stepUp(); updateVehicleSelection();">
+                  <i class="fas fa-plus"></i>
+                </button>
+              </div>
+              <div class="form-text">Number of vehicles to use for delivery routes</div>
             </div>
+            
             <div class="mb-3">
               <label for="max_distance" class="form-label"
                 >Max Distance per Vehicle (km)</label
@@ -218,7 +229,7 @@
             <div class="mb-3">
                 <label class="form-label">Vehicle Selection</label>
                 <div class="vehicle-list">
-                    {% for i in range(vehicle_count|default(1, true)) %}
+                    {% for i in range(1) %}
                     <div class="vehicle-item mb-2">
                         <div class="input-group">
                             <span class="input-group-text">Vehicle {{ i+1 }}</span>
@@ -447,7 +458,7 @@
       document.body.removeChild(link);
   }
 
-  // Make updateFuelEstimates function globally accessible
+  // UPDATED: Function to update fuel estimates
   window.updateFuelEstimates = function() {
       const vehicleCount = parseInt(document.getElementById('vehicle_count').value) || 1;
       const maxDistance = parseFloat(document.getElementById('max_distance').value) || 100;
@@ -472,9 +483,11 @@
       
       // Calculate estimated fuel consumption
       let totalFuel = 0;
-      vehicleTypes.forEach(type => {
-          const rate = fuelRates[type] || 10;
-          totalFuel += (maxDistance * rate / 100);
+      vehicleTypes.forEach((type, index) => {
+          if (index < vehicleCount) { // Only count up to vehicleCount
+              const rate = fuelRates[type] || 10;
+              totalFuel += (maxDistance * rate / 100);
+          }
       });
       
       // Calculate fuel savings
@@ -500,7 +513,7 @@
       document.querySelector('.progress-bar').style.width = savingsPercent + '%';
   };
 
-  // Function to update vehicle selection based on count
+  // UPDATED: Function to update vehicle selection based on count
   function updateVehicleSelection() {
       const count = parseInt(document.getElementById('vehicle_count').value) || 1;
       const vehicleList = document.querySelector('.vehicle-list');
@@ -531,9 +544,27 @@
       
       // Update estimates after changing vehicle count
       updateFuelEstimates();
+      
+      // Update hidden field with the count value
+      updateVehicleCountField(count);
   }
 
-  // Function to add event listeners to vehicle type selects
+  // UPDATED: Function to update the vehicle count field
+  function updateVehicleCountField(count) {
+      // This ensures the count is properly passed in the form submission
+      let hiddenField = document.getElementById('vehicle_count_hidden');
+      if (!hiddenField) {
+          // Create hidden field if it doesn't exist
+          hiddenField = document.createElement('input');
+          hiddenField.type = 'hidden';
+          hiddenField.name = 'vehicle_count';
+          hiddenField.id = 'vehicle_count_hidden';
+          document.getElementById('optimize-form').appendChild(hiddenField);
+      }
+      hiddenField.value = count;
+  }
+
+  // UPDATED: Function to add event listeners to vehicle type selects
   function addVehicleSelectListeners() {
       document.querySelectorAll('.vehicle-type-select').forEach(select => {
           select.removeEventListener('change', window.updateFuelEstimates);
@@ -541,7 +572,7 @@
       });
   }
 
-  // Initialize when DOM is loaded
+  // UPDATED: Initialize when DOM is loaded
   document.addEventListener('DOMContentLoaded', function() {
       // Add event listeners to form fields
       const vehicleCountInput = document.getElementById('vehicle_count');
@@ -549,7 +580,20 @@
       const maxDistanceInput = document.getElementById('max_distance');
       
       if (vehicleCountInput) {
-          vehicleCountInput.addEventListener('change', updateVehicleSelection);
+          // Update vehicle selection whenever the count changes
+          vehicleCountInput.addEventListener('change', function() {
+              updateVehicleSelection();
+          });
+          
+          // Ensure the count is properly set as a number, not a string
+          vehicleCountInput.addEventListener('input', function() {
+              // Ensure value is at least 1
+              if (parseInt(this.value) < 1) {
+                  this.value = 1;
+              }
+              // Update hidden field with the same value to ensure it's submitted
+              updateVehicleCountField(this.value);
+          });
       }
       
       if (optimizationSelect) {
@@ -565,6 +609,16 @@
       
       // Initialize estimates
       window.updateFuelEstimates();
+      
+      // Initialize vehicle selection based on current count
+      updateVehicleSelection();
+      
+      // Make sure form submission includes correct vehicle count
+      document.getElementById('optimize-form').addEventListener('submit', function(e) {
+          // Update hidden field one last time before submission
+          const count = parseInt(document.getElementById('vehicle_count').value) || 1;
+          updateVehicleCountField(count);
+      });
   });
 </script>
 {% endblock %}

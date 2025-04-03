@@ -1,558 +1,558 @@
 {% extends "base.html" %} {% block title %}Route Details - {{ route.name }}{%
-endblock %} {% block content %}
-<div class="container-fluid">
-  <div class="row mb-4">
-    <div class="col-md-12">
-      <nav aria-label="breadcrumb">
-        <ol class="breadcrumb">
-          <li class="breadcrumb-item">
-            <a href="{{ url_for('dashboard') }}">Dashboard</a>
-          </li>
-          <li class="breadcrumb-item active">{{ route.name }}</li>
-        </ol>
-      </nav>
-      <h1>{{ route.name }}</h1>
-      <p class="text-muted">
-        Created on {{ route.created_at.strftime('%B %d, %Y at %I:%M %p') }} |
-        Total Distance: {{ "%.2f"|format(route.total_distance) }} km | Estimated
-        Time: {{ "%.2f"|format(route.total_time) }} hours
-      </p>
-    </div>
-  </div>
-
-  <div class="row">
-    <!-- Map View -->
-    <div class="col-md-8">
-      <div class="card mb-4">
-        <div class="card-header">
-          <h5 class="card-title mb-0">Route Map</h5>
-        </div>
-        <div class="card-body p-0">
-          <div id="route-map" style="height: 600px"></div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Route Details -->
-    <div class="col-md-4">
-      <div class="card mb-4">
-        <div class="card-header">
-          <h5 class="card-title mb-0">Route Summary</h5>
-        </div>
-
-        <div class="card-body">
-          <div class="d-flex justify-content-between">
-            <div>
-              <h6>Total Vehicles</h6>
-              <p class="h4">{{ route_data|length }}</p>
-            </div>
-
-            <div>
-              <h6>Total Stops</h6>
-              <p class="h4">
-                {% set ns = namespace(total_stops=0) %} {% for vehicle in
-                route_data %} {% if vehicle.stops and vehicle.stops|length > 0
-                %} {% set ns.total_stops = ns.total_stops +
-                (vehicle.stops|length - 2) %} {% endif %} {% endfor %} {{
-                ns.total_stops }}
-              </p>
-            </div>
-
-            <div>
-              <h6>Total Distance</h6>
-              <p class="h4">{{ "%.2f"|format(route.total_distance) }} km</p>
-            </div>
-          </div>
-
-          <!-- Fuel efficiency section -->
-          {% if route.total_fuel %}
-          <hr />
-          <div class="row mt-3">
-            <div class="col-12">
-              <h6>
-                <i class="fas fa-gas-pump text-success me-2"></i>Fuel Efficiency
-              </h6>
-            </div>
-            <div class="col-md-4 mt-2">
-              <div class="text-center">
-                <p class="text-muted mb-1">Total Fuel</p>
-                <p class="h4">{{ "%.2f"|format(route.total_fuel) }} L</p>
-              </div>
-            </div>
-            <div class="col-md-4 mt-2">
-              <div class="text-center">
-                <p class="text-muted mb-1">Fuel Saved</p>
-                <p class="h4 text-success">
-                  {{ "%.2f"|format(route.fuel_saved) }} L
-                </p>
-              </div>
-            </div>
-            <div class="col-md-4 mt-2">
-              <div class="text-center">
-                <p class="text-muted mb-1">CO₂ Saved</p>
-                <p class="h4 text-success">
-                  {{ "%.2f"|format(route.co2_saved) }} kg
-                </p>
-              </div>
-            </div>
-            <div class="col-12 mt-3">
-              <div class="progress" style="height: 5px">
-                <div
-                  class="progress-bar bg-success"
-                  role="progressbar"
-                  style="width: {{ (route.fuel_saved / route.total_fuel * 100) if route.total_fuel else 0 }}%"
-                ></div>
-              </div>
-              <div class="d-flex justify-content-between mt-1">
-                <small class="text-muted">Standard Route</small>
-                <small class="text-muted">
-                  {{ "%.1f"|format(route.fuel_saved / route.total_fuel * 100) if
-                  route.total_fuel else 0 }}% Savings
-                </small>
-              </div>
-            </div>
-          </div>
-          {% endif %}
-        </div>
-      </div>
-
-      <!-- Traffic Information Card -->
-      <!-- Replace the current traffic information card with this -->
-      {% if traffic_data %}
-      <div class="card mb-4">
-        <div class="card-header bg-info text-white">
-          <h5 class="card-title mb-0">
-            <i class="fas fa-traffic-light me-2"></i>Traffic Information
-          </h5>
-        </div>
-        <div class="card-body">
-          <div class="row">
-            <div class="col">
-              <h6>Congestion Areas</h6>
-              <p class="h4">
-                {{ traffic_data.congestion_areas|length if
-                traffic_data.congestion_areas is defined else 0 }}
-              </p>
-            </div>
-            <div class="col">
-              <h6>Traffic Signals</h6>
-              <p class="h4">
-                {{ traffic_data.traffic_signals|length if
-                traffic_data.traffic_signals is defined else 0 }}
-              </p>
-            </div>
-            <div class="col">
-              <h6>Data Source</h6>
-              <p class="h4">
-                {% if traffic_data.is_simulated %}
-                <span class="badge bg-warning">Simulated</span>
-                {% else %}
-                <span class="badge bg-success">Real-time</span>
-                {% endif %}
-              </p>
-            </div>
-          </div>
-          <div class="mt-3">
-            <p class="text-muted mb-0">
-              Traffic data has been applied to route calculations. Areas with
-              higher congestion are routed around when possible.
-            </p>
-          </div>
-        </div>
-      </div>
-      {% endif %}
-
-      <!-- Route Assignment Status -->
-      <div class="card mb-4">
-        <div class="card-header">
-          <h5 class="card-title mb-0">Assignment Status</h5>
-        </div>
-        <div class="card-body">
-          {% if route.driver_assignments and route.driver_assignments|length > 0
-          %}
-          <div class="alert alert-success">
-            <i class="fas fa-check-circle me-2"></i>This route is assigned to:
-          </div>
-          <ul class="list-group">
-            {% for assignment in route.driver_assignments %}
-            <li
-              class="list-group-item d-flex justify-content-between align-items-center"
-            >
-              <span>
-                <strong
-                  >{{ assignment.driver.first_name }} {{
-                  assignment.driver.last_name }}</strong
-                >
-                {% if assignment.driver.vehicle %}
-                <br />
-                <small class="text-muted"
-                  >{{ assignment.driver.vehicle.name }} ({{
-                  assignment.driver.vehicle.license_plate }})</small
-                >
-                {% endif %}
-              </span>
-              <span
-                class="badge bg-{{ 
-                                        'success' if assignment.status == 'completed' else
-                                        'primary' if assignment.status == 'in_progress' else
-                                        'warning' }}"
-              >
-                {{ assignment.status|replace('_', ' ')|title }}
-              </span>
+  endblock %} {% block content %}
+  <div class="container-fluid">
+    <div class="row mb-4">
+      <div class="col-md-12">
+        <nav aria-label="breadcrumb">
+          <ol class="breadcrumb">
+            <li class="breadcrumb-item">
+              <a href="{{ url_for('dashboard') }}">Dashboard</a>
             </li>
-            {% endfor %}
-          </ul>
-          {% else %}
-          <div class="alert alert-warning">
-            <i class="fas fa-exclamation-triangle me-2"></i>This route is not
-            assigned to any driver.
+            <li class="breadcrumb-item active">{{ route.name }}</li>
+          </ol>
+        </nav>
+        <h1>{{ route.name }}</h1>
+        <p class="text-muted">
+          Created on {{ route.created_at.strftime('%B %d, %Y at %I:%M %p') }} |
+          Total Distance: {{ "%.2f"|format(route.total_distance) }} km | Estimated
+          Time: {{ "%.2f"|format(route.total_time) }} hours
+        </p>
+      </div>
+    </div>
+  
+    <div class="row">
+      <!-- Map View -->
+      <div class="col-md-8">
+        <div class="card mb-4">
+          <div class="card-header">
+            <h5 class="card-title mb-0">Route Map</h5>
           </div>
-          {% endif %}
+          <div class="card-body p-0">
+            <div id="route-map" style="height: 600px"></div>
+          </div>
         </div>
       </div>
-
-      <!-- Route Assignment Form -->
-      <div class="card mb-4">
-        <div class="card-header">
-          <h5 class="card-title mb-0">Assign Route to Driver</h5>
-        </div>
-        <div class="card-body">
-          <form action="{{ url_for('assign_route_to_driver') }}" method="post">
-            <input type="hidden" name="route_id" value="{{ route.id }}" />
-
-            <div class="mb-3">
-              <label for="driver_id" class="form-label">Select Driver</label>
-              <select
-                class="form-select"
-                id="driver_id"
-                name="driver_id"
-                required
-              >
-                <option value="" selected disabled>Choose a driver...</option>
-                {% for driver in drivers %} {% if driver.is_active %}
-                <option value="{{ driver.id }}">
-                  {{ driver.first_name }} {{ driver.last_name }} {% for vehicle
-                  in vehicles %} {% if vehicle.id == driver.vehicle_id %} ({{
-                  vehicle.name }}) {% endif %} {% endfor %}
-                </option>
-                {% endif %} {% endfor %}
-              </select>
+  
+      <!-- Route Details -->
+      <div class="col-md-4">
+        <div class="card mb-4">
+          <div class="card-header">
+            <h5 class="card-title mb-0">Route Summary</h5>
+          </div>
+  
+          <div class="card-body">
+            <div class="d-flex justify-content-between">
+              <div>
+                <h6>Total Vehicles</h6>
+                <p class="h4">{{ route_data|length }}</p>
+              </div>
+  
+              <div>
+                <h6>Total Stops</h6>
+                <p class="h4">
+                  {% set ns = namespace(total_stops=0) %} {% for vehicle in
+                  route_data %} {% if vehicle.stops and vehicle.stops|length > 0
+                  %} {% set ns.total_stops = ns.total_stops +
+                  (vehicle.stops|length - 2) %} {% endif %} {% endfor %} {{
+                  ns.total_stops }}
+                </p>
+              </div>
+  
+              <div>
+                <h6>Total Distance</h6>
+                <p class="h4">{{ "%.2f"|format(route.total_distance) }} km</p>
+              </div>
             </div>
-
-            <div class="form-text mb-3">
-              <p class="mb-1">
-                <i class="fas fa-info-circle me-1"></i> This will assign all
-                stops on this route to the selected driver.
-              </p>
-              <p class="mb-0">
-                Drivers will receive notifications and can access the route from
-                their mobile app.
+  
+            <!-- Fuel efficiency section -->
+            {% if route.total_fuel %}
+            <hr />
+            <div class="row mt-3">
+              <div class="col-12">
+                <h6>
+                  <i class="fas fa-gas-pump text-success me-2"></i>Fuel Efficiency
+                </h6>
+              </div>
+              <div class="col-md-4 mt-2">
+                <div class="text-center">
+                  <p class="text-muted mb-1">Total Fuel</p>
+                  <p class="h4">{{ "%.2f"|format(route.total_fuel) }} L</p>
+                </div>
+              </div>
+              <div class="col-md-4 mt-2">
+                <div class="text-center">
+                  <p class="text-muted mb-1">Fuel Saved</p>
+                  <p class="h4 text-success">
+                    {{ "%.2f"|format(route.fuel_saved) }} L
+                  </p>
+                </div>
+              </div>
+              <div class="col-md-4 mt-2">
+                <div class="text-center">
+                  <p class="text-muted mb-1">CO₂ Saved</p>
+                  <p class="h4 text-success">
+                    {{ "%.2f"|format(route.co2_saved) }} kg
+                  </p>
+                </div>
+              </div>
+              <div class="col-12 mt-3">
+                <div class="progress" style="height: 5px">
+                  <div
+                    class="progress-bar bg-success"
+                    role="progressbar"
+                    style="width: {{ (route.fuel_saved / route.total_fuel * 100) if route.total_fuel else 0 }}%"
+                  ></div>
+                </div>
+                <div class="d-flex justify-content-between mt-1">
+                  <small class="text-muted">Standard Route</small>
+                  <small class="text-muted">
+                    {{ "%.1f"|format(route.fuel_saved / route.total_fuel * 100) if
+                    route.total_fuel else 0 }}% Savings
+                  </small>
+                </div>
+              </div>
+            </div>
+            {% endif %}
+          </div>
+        </div>
+  
+        <!-- Traffic Information Card -->
+        <!-- Replace the current traffic information card with this -->
+        {% if traffic_data %}
+        <div class="card mb-4">
+          <div class="card-header bg-info text-white">
+            <h5 class="card-title mb-0">
+              <i class="fas fa-traffic-light me-2"></i>Traffic Information
+            </h5>
+          </div>
+          <div class="card-body">
+            <div class="row">
+              <div class="col">
+                <h6>Congestion Areas</h6>
+                <p class="h4">
+                  {{ traffic_data.congestion_areas|length if
+                  traffic_data.congestion_areas is defined else 0 }}
+                </p>
+              </div>
+              <div class="col">
+                <h6>Traffic Signals</h6>
+                <p class="h4">
+                  {{ traffic_data.traffic_signals|length if
+                  traffic_data.traffic_signals is defined else 0 }}
+                </p>
+              </div>
+              <div class="col">
+                <h6>Data Source</h6>
+                <p class="h4">
+                  {% if traffic_data.is_simulated %}
+                  <span class="badge bg-warning">Simulated</span>
+                  {% else %}
+                  <span class="badge bg-success">Real-time</span>
+                  {% endif %}
+                </p>
+              </div>
+            </div>
+            <div class="mt-3">
+              <p class="text-muted mb-0">
+                Traffic data has been applied to route calculations. Areas with
+                higher congestion are routed around when possible.
               </p>
             </div>
-
-            <button type="submit" class="btn btn-primary">
-              <i class="fas fa-user-plus me-2"></i>Assign Route
-            </button>
-          </form>
+          </div>
         </div>
-      </div>
-
-      <div class="accordion" id="routeAccordion">
-        {% for vehicle_route in route_data %}
-        <div class="accordion-item">
-          <h2 class="accordion-header">
-            <button
-              class="accordion-button {% if not loop.first %}collapsed{% endif %}"
-              type="button"
-              data-bs-toggle="collapse"
-              data-bs-target="#vehicle{{ loop.index }}"
-            >
-              Vehicle {{ loop.index }} - {{
-              "%.2f"|format(vehicle_route.total_distance) }} km {% if
-              vehicle_route.vehicle_type %}
-              <span class="badge bg-secondary ms-2"
-                >{{ vehicle_route.vehicle_type|title }}</span
+        {% endif %}
+  
+        <!-- Route Assignment Status -->
+        <div class="card mb-4">
+          <div class="card-header">
+            <h5 class="card-title mb-0">Assignment Status</h5>
+          </div>
+          <div class="card-body">
+            {% if route.driver_assignments and route.driver_assignments|length > 0
+            %}
+            <div class="alert alert-success">
+              <i class="fas fa-check-circle me-2"></i>This route is assigned to:
+            </div>
+            <ul class="list-group">
+              {% for assignment in route.driver_assignments %}
+              <li
+                class="list-group-item d-flex justify-content-between align-items-center"
               >
-              {% endif %} {% if vehicle_route.fuel_saved %}
-              <span class="badge bg-success ms-2">
-                {{ "%.1f"|format(vehicle_route.fuel_saved) }}L saved
-              </span>
-              {% endif %}
-            </button>
-          </h2>
-          <div
-            id="vehicle{{ loop.index }}"
-            class="accordion-collapse collapse {% if loop.first %}show{% endif %}"
-            data-bs-parent="#routeAccordion"
-          >
-            <div class="accordion-body">
-              <h6>Stops ({{ vehicle_route.stops|length - 2 }})</h6>
-              <ol class="list-group list-group-numbered">
-                {% for stop in vehicle_route.stops %}
-                <li
-                  class="list-group-item {% if stop.is_depot %}list-group-item-primary{% endif %}"
+                <span>
+                  <strong
+                    >{{ assignment.driver.first_name }} {{
+                    assignment.driver.last_name }}</strong
+                  >
+                  {% if assignment.driver.vehicle %}
+                  <br />
+                  <small class="text-muted"
+                    >{{ assignment.driver.vehicle.name }} ({{
+                    assignment.driver.vehicle.license_plate }})</small
+                  >
+                  {% endif %}
+                </span>
+                <span
+                  class="badge bg-{{ 
+                                          'success' if assignment.status == 'completed' else
+                                          'primary' if assignment.status == 'in_progress' else
+                                          'warning' }}"
                 >
-                  <div class="d-flex justify-content-between align-items-start">
-                    <div class="ms-2 me-auto">
-                      <div class="fw-bold">{{ stop.name }}</div>
-                      {% if stop.time_window_start and stop.time_window_end %}
-                      <small
-                        >Time Window: {% if stop.time_window_start is string %}
-                        {{ stop.time_window_start }} - {{ stop.time_window_end
-                        }} {% else %} {{ stop.time_window_start.strftime('%I:%M
-                        %p') }} - {{ stop.time_window_end.strftime('%I:%M %p')
-                        }} {% endif %}
-                      </small>
-                      {% endif %}
-
-                      <!-- Traffic factor indicator -->
-                      {% if stop.traffic_factor and stop.traffic_factor > 1.0 %}
-                      <span class="badge bg-warning ms-2"
-                        >Traffic: {{ stop.traffic_factor }}x</span
-                      >
-                      {% endif %}
-
-                      <!-- Fuel consumption for leg if available -->
-                      {% if stop.leg_fuel %}
-                      <div class="mt-1 small text-muted">
-                        <i class="fas fa-gas-pump me-1"></i> {{
-                        "%.2f"|format(stop.leg_fuel) }} L
+                  {{ assignment.status|replace('_', ' ')|title }}
+                </span>
+              </li>
+              {% endfor %}
+            </ul>
+            {% else %}
+            <div class="alert alert-warning">
+              <i class="fas fa-exclamation-triangle me-2"></i>This route is not
+              assigned to any driver.
+            </div>
+            {% endif %}
+          </div>
+        </div>
+  
+        <!-- Route Assignment Form -->
+        <div class="card mb-4">
+          <div class="card-header">
+            <h5 class="card-title mb-0">Assign Route to Driver</h5>
+          </div>
+          <div class="card-body">
+            <form action="{{ url_for('assign_route_to_driver') }}" method="post">
+              <input type="hidden" name="route_id" value="{{ route.id }}" />
+  
+              <div class="mb-3">
+                <label for="driver_id" class="form-label">Select Driver</label>
+                <select
+                  class="form-select"
+                  id="driver_id"
+                  name="driver_id"
+                  required
+                >
+                  <option value="" selected disabled>Choose a driver...</option>
+                  {% for driver in drivers %} {% if driver.is_active %}
+                  <option value="{{ driver.id }}">
+                    {{ driver.first_name }} {{ driver.last_name }} {% for vehicle
+                    in vehicles %} {% if vehicle.id == driver.vehicle_id %} ({{
+                    vehicle.name }}) {% endif %} {% endfor %}
+                  </option>
+                  {% endif %} {% endfor %}
+                </select>
+              </div>
+  
+              <div class="form-text mb-3">
+                <p class="mb-1">
+                  <i class="fas fa-info-circle me-1"></i> This will assign all
+                  stops on this route to the selected driver.
+                </p>
+                <p class="mb-0">
+                  Drivers will receive notifications and can access the route from
+                  their mobile app.
+                </p>
+              </div>
+  
+              <button type="submit" class="btn btn-primary">
+                <i class="fas fa-user-plus me-2"></i>Assign Route
+              </button>
+            </form>
+          </div>
+        </div>
+  
+        <div class="accordion" id="routeAccordion">
+          {% for vehicle_route in route_data %}
+          <div class="accordion-item">
+            <h2 class="accordion-header">
+              <button
+                class="accordion-button {% if not loop.first %}collapsed{% endif %}"
+                type="button"
+                data-bs-toggle="collapse"
+                data-bs-target="#vehicle{{ loop.index }}"
+              >
+                Vehicle {{ loop.index }} - {{
+                "%.2f"|format(vehicle_route.total_distance) }} km {% if
+                vehicle_route.vehicle_type %}
+                <span class="badge bg-secondary ms-2"
+                  >{{ vehicle_route.vehicle_type|title }}</span
+                >
+                {% endif %} {% if vehicle_route.fuel_saved %}
+                <span class="badge bg-success ms-2">
+                  {{ "%.1f"|format(vehicle_route.fuel_saved) }}L saved
+                </span>
+                {% endif %}
+              </button>
+            </h2>
+            <div
+              id="vehicle{{ loop.index }}"
+              class="accordion-collapse collapse {% if loop.first %}show{% endif %}"
+              data-bs-parent="#routeAccordion"
+            >
+              <div class="accordion-body">
+                <h6>Stops ({{ vehicle_route.stops|length - 2 }})</h6>
+                <ol class="list-group list-group-numbered">
+                  {% for stop in vehicle_route.stops %}
+                  <li
+                    class="list-group-item {% if stop.is_depot %}list-group-item-primary{% endif %}"
+                  >
+                    <div class="d-flex justify-content-between align-items-start">
+                      <div class="ms-2 me-auto">
+                        <div class="fw-bold">{{ stop.name }}</div>
+                        {% if stop.time_window_start and stop.time_window_end %}
+                        <small
+                          >Time Window: {% if stop.time_window_start is string %}
+                          {{ stop.time_window_start }} - {{ stop.time_window_end
+                          }} {% else %} {{ stop.time_window_start.strftime('%I:%M
+                          %p') }} - {{ stop.time_window_end.strftime('%I:%M %p')
+                          }} {% endif %}
+                        </small>
+                        {% endif %}
+  
+                        <!-- Traffic factor indicator -->
+                        {% if stop.traffic_factor and stop.traffic_factor > 1.0 %}
+                        <span class="badge bg-warning ms-2"
+                          >Traffic: {{ stop.traffic_factor }}x</span
+                        >
+                        {% endif %}
+  
+                        <!-- Fuel consumption for leg if available -->
+                        {% if stop.leg_fuel %}
+                        <div class="mt-1 small text-muted">
+                          <i class="fas fa-gas-pump me-1"></i> {{
+                          "%.2f"|format(stop.leg_fuel) }} L
+                        </div>
+                        {% endif %}
                       </div>
+                      {% if stop.is_depot %}
+                      <span class="badge bg-primary">Depot</span>
                       {% endif %}
                     </div>
-                    {% if stop.is_depot %}
-                    <span class="badge bg-primary">Depot</span>
-                    {% endif %}
-                  </div>
-                </li>
-                {% endfor %}
-              </ol>
-
-              <div class="mt-3">
-                <h6>Route Details</h6>
-                <table class="table table-sm">
-                  <tbody>
-                    <tr>
-                      <th>Distance:</th>
-                      <td>
-                        {{ "%.2f"|format(vehicle_route.total_distance) }} km
-                      </td>
-                    </tr>
-                    <tr>
-                      <th>Est. Time:</th>
-                      <td>
-                        {{ "%.2f"|format(vehicle_route.total_time) }} hours
-                      </td>
-                    </tr>
-                    <tr>
-                      <th>Stops:</th>
-                      <td>{{ vehicle_route.stops|length - 2 }}</td>
-                    </tr>
-                    <!-- Add these new rows for fuel info -->
-                    {% if vehicle_route.total_fuel %}
-                    <tr>
-                      <th>Fuel Used:</th>
-                      <td>{{ "%.2f"|format(vehicle_route.total_fuel) }} L</td>
-                    </tr>
-                    <tr>
-                      <th>Fuel Saved:</th>
-                      <td class="text-success">
-                        {{ "%.2f"|format(vehicle_route.fuel_saved) }} L
-                      </td>
-                    </tr>
-                    <tr>
-                      <th>Cost Saved:</th>
-                      <td class="text-success">
-                        ${{ "%.2f"|format(vehicle_route.cost_saved) }}
-                      </td>
-                    </tr>
-                    {% endif %}
-                    <!-- Traffic impact row -->
-                    <tr>
-                      <th>Traffic Impact:</th>
-                      <td>
-                        {% if vehicle_route.traffic_impact is defined and
-                        vehicle_route.traffic_impact > 0 %}
-                        <span class="text-danger"
-                          >+{{ vehicle_route.traffic_impact }} minutes</span
-                        >
-                        {% else %}
-                        <span class="text-success">No delays</span>
-                        {% endif %}
-                      </td>
-                    </tr>
-                  </tbody>
-                </table>
+                  </li>
+                  {% endfor %}
+                </ol>
+  
+                <div class="mt-3">
+                  <h6>Route Details</h6>
+                  <table class="table table-sm">
+                    <tbody>
+                      <tr>
+                        <th>Distance:</th>
+                        <td>
+                          {{ "%.2f"|format(vehicle_route.total_distance) }} km
+                        </td>
+                      </tr>
+                      <tr>
+                        <th>Est. Time:</th>
+                        <td>
+                          {{ "%.2f"|format(vehicle_route.total_time) }} hours
+                        </td>
+                      </tr>
+                      <tr>
+                        <th>Stops:</th>
+                        <td>{{ vehicle_route.stops|length - 2 }}</td>
+                      </tr>
+                      <!-- Add these new rows for fuel info -->
+                      {% if vehicle_route.total_fuel %}
+                      <tr>
+                        <th>Fuel Used:</th>
+                        <td>{{ "%.2f"|format(vehicle_route.total_fuel) }} L</td>
+                      </tr>
+                      <tr>
+                        <th>Fuel Saved:</th>
+                        <td class="text-success">
+                          {{ "%.2f"|format(vehicle_route.fuel_saved) }} L
+                        </td>
+                      </tr>
+                      <tr>
+                        <th>Cost Saved:</th>
+                        <td class="text-success">
+                          ${{ "%.2f"|format(vehicle_route.cost_saved) }}
+                        </td>
+                      </tr>
+                      {% endif %}
+                      <!-- Traffic impact row -->
+                      <tr>
+                        <th>Traffic Impact:</th>
+                        <td>
+                          {% if vehicle_route.traffic_impact is defined and
+                          vehicle_route.traffic_impact > 0 %}
+                          <span class="text-danger"
+                            >+{{ vehicle_route.traffic_impact }} minutes</span
+                          >
+                          {% else %}
+                          <span class="text-success">No delays</span>
+                          {% endif %}
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
               </div>
             </div>
           </div>
+          {% endfor %}
         </div>
-        {% endfor %}
-      </div>
-
-      <div class="mt-4">
-        <a href="{{ url_for('dashboard') }}" class="btn btn-outline-secondary">
-          <i class="fas fa-arrow-left me-2"></i>Back to Dashboard
-        </a>
-        <a
-          href="{{ url_for('api_route', route_id=route.id) }}"
-          class="btn btn-outline-primary float-end"
-        >
-          <i class="fas fa-download me-2"></i>Export JSON
-        </a>
+  
+        <div class="mt-4">
+          <a href="{{ url_for('dashboard') }}" class="btn btn-outline-secondary">
+            <i class="fas fa-arrow-left me-2"></i>Back to Dashboard
+          </a>
+          <a
+            href="{{ url_for('api_route', route_id=route.id) }}"
+            class="btn btn-outline-primary float-end"
+          >
+            <i class="fas fa-download me-2"></i>Export JSON
+          </a>
+        </div>
       </div>
     </div>
   </div>
-</div>
-{% endblock %} {% block scripts %}
-<script>
-  // Helper function to format time in AM/PM for JavaScript
-  function formatTimeAMPM(timeStr) {
-      if (!timeStr) return '';
-      const [hours, minutes] = timeStr.split(':');
-      let h = parseInt(hours);
-      const ampm = h >= 12 ? 'PM' : 'AM';
-      h = h % 12;
-      h = h ? h : 12; // the hour '0' should be '12'
-      return h + ':' + minutes + ' ' + ampm;
-  }
-
-  // Initialize map
-  var map = L.map('route-map').setView([40.7128, -74.0060], 12);
-
-  // Add OpenStreetMap tiles
-  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-  }).addTo(map);
-
-  // Route data from backend
-  var routeData = {{ route_data|tojson }};
-
-  // Colors for different routes
-  var colors = [
-      '#3388ff', '#ff6f61', '#58508d', '#bc5090', '#ff9e00',
-      '#4361ee', '#3a86ff', '#ff006e', '#8338ec', '#fb5607'
-  ];
-
-  // Map bounds
-  var bounds = L.latLngBounds();
-
-  // Process each vehicle route
-  routeData.forEach(function(vehicleRoute, index) {
-      var routeColor = colors[index % colors.length];
-      var routePoints = [];
-      var markers = [];
-
-      // Add markers for each stop
-      vehicleRoute.stops.forEach(function(stop, stopIndex) {
-          var isDepot = stop.is_depot;
-
-          // Create marker
-          var markerIcon = L.divIcon({
-              html: `<div style="background-color: ${routeColor}; color: white; border-radius: 50%; width: 24px; height: 24px; display: flex; align-items: center; justify-content: center; font-weight: bold;">${stopIndex + 1}</div>`,
-              className: '',
-              iconSize: [24, 24]
-          });
-
-          if (isDepot) {
-              markerIcon = L.divIcon({
-                  html: `<div style="background-color: #000; color: white; border-radius: 50%; width: 24px; height: 24px; display: flex; align-items: center; justify-content: center; font-weight: bold;">D</div>`,
-                  className: '',
-                  iconSize: [24, 24]
-              });
-          }
-
-          // Format time window for popup
-          var timeWindowText = "";
-          if (stop.time_window_start && stop.time_window_end) {
-              timeWindowText = "Time Window: " + formatTimeAMPM(stop.time_window_start) + " - " + formatTimeAMPM(stop.time_window_end);
-          } else if (isDepot) {
-              timeWindowText = "Depot Location";
-          } else {
-              timeWindowText = "No time constraints";
-          }
-
-          // Add traffic info to popup if available
-          var trafficText = "";
-          if (stop.traffic_factor && stop.traffic_factor > 1.0) {
-              trafficText = `<br><span class="text-danger">Traffic Factor: ${stop.traffic_factor}x</span>`;
-          }
-
-          // Add fuel info to popup if available
-          var fuelText = "";
-          if (stop.leg_fuel) {
-              fuelText = `<br><span class="text-primary">Fuel: ${stop.leg_fuel.toFixed(2)} L</span>`;
-          }
-
-          var marker = L.marker([stop.latitude, stop.longitude], {icon: markerIcon})
-              .addTo(map)
-              .bindPopup(
-                  "<strong>" + stop.name + "</strong><br>" +
-                  timeWindowText + "<br>" +
-                  "Stop #" + (stopIndex + 1) +
-                  trafficText +
-                  fuelText
-              );
-
-          markers.push(marker);
-          routePoints.push([stop.latitude, stop.longitude]);
-          bounds.extend([stop.latitude, stop.longitude]);
-      });
-
-      // Add polyline for the route
-      var routeLine = L.polyline(routePoints, {
-          color: routeColor,
-          weight: 4,
-          opacity: 0.7,
-          lineJoin: 'round'
-      }).addTo(map);
-
-      // Add route number to polyline
-      var routeCenter = routeLine.getBounds().getCenter();
-      var label = vehicleRoute.vehicle_type ? `${vehicleRoute.vehicle_type} ${index + 1}` : `Vehicle ${index + 1}`;
-
-      L.marker(routeCenter, {
-          icon: L.divIcon({
-              html: `<div style="background-color: ${routeColor}; color: white; border-radius: 4px; padding: 3px 8px; font-weight: bold;">${label}</div>`,
-              className: '',
-              iconSize: [80, 20]
-          })
-      }).addTo(map);
-  });
-
-  // Fit map to show all markers
-  if (bounds.isValid()) {
-      map.fitBounds(bounds);
-  }
-</script>
-
-<!-- Add fuel efficiency charts -->
-<script src="{{ url_for('static', filename='js/fuel_efficiency_chart.js') }}"></script>
-<script>
-  // Initialize fuel efficiency visualizations after map and routes are loaded
-  document.addEventListener("DOMContentLoaded", function () {
-    // Wait a second to ensure everything is loaded
-    setTimeout(function () {
-      // Initialize fuel efficiency visualizations
-      if (typeof initFuelEfficiencyChart === "function") {
-        initFuelEfficiencyChart(routeData);
-        createFuelBreakdownChart(routeData);
-      }
-    }, 1000);
-  });
-</script>
-
-<!-- Traffic visualization script -->
-<script src="{{ url_for('static', filename='js/traffic_map.js') }}"></script>
-<script>
-  // Wait for map and routes to be fully loaded
-  document.addEventListener("DOMContentLoaded", function () {
-    setTimeout(function () {
-      // Initialize traffic visualization
-      if (typeof map !== "undefined" && typeof routeData !== "undefined") {
-        addTrafficToRouteMap(map, routeData);
-      }
-    }, 1000); // Short delay to ensure map is ready
-  });
-</script>
-{% endblock %}
+  {% endblock %} {% block scripts %}
+  <script>
+    // Helper function to format time in AM/PM for JavaScript
+    function formatTimeAMPM(timeStr) {
+        if (!timeStr) return '';
+        const [hours, minutes] = timeStr.split(':');
+        let h = parseInt(hours);
+        const ampm = h >= 12 ? 'PM' : 'AM';
+        h = h % 12;
+        h = h ? h : 12; // the hour '0' should be '12'
+        return h + ':' + minutes + ' ' + ampm;
+    }
+  
+    // Initialize map
+    var map = L.map('route-map').setView([40.7128, -74.0060], 12);
+  
+    // Add OpenStreetMap tiles
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+    }).addTo(map);
+  
+    // Route data from backend
+    var routeData = {{ route_data|tojson }};
+  
+    // Colors for different routes
+    var colors = [
+        '#3388ff', '#ff6f61', '#58508d', '#bc5090', '#ff9e00',
+        '#4361ee', '#3a86ff', '#ff006e', '#8338ec', '#fb5607'
+    ];
+  
+    // Map bounds
+    var bounds = L.latLngBounds();
+  
+    // Process each vehicle route
+    routeData.forEach(function(vehicleRoute, index) {
+        var routeColor = colors[index % colors.length];
+        var routePoints = [];
+        var markers = [];
+  
+        // Add markers for each stop
+        vehicleRoute.stops.forEach(function(stop, stopIndex) {
+            var isDepot = stop.is_depot;
+  
+            // Create marker
+            var markerIcon = L.divIcon({
+                html: `<div style="background-color: ${routeColor}; color: white; border-radius: 50%; width: 24px; height: 24px; display: flex; align-items: center; justify-content: center; font-weight: bold;">${stopIndex + 1}</div>`,
+                className: '',
+                iconSize: [24, 24]
+            });
+  
+            if (isDepot) {
+                markerIcon = L.divIcon({
+                    html: `<div style="background-color: #000; color: white; border-radius: 50%; width: 24px; height: 24px; display: flex; align-items: center; justify-content: center; font-weight: bold;">D</div>`,
+                    className: '',
+                    iconSize: [24, 24]
+                });
+            }
+  
+            // Format time window for popup
+            var timeWindowText = "";
+            if (stop.time_window_start && stop.time_window_end) {
+                timeWindowText = "Time Window: " + formatTimeAMPM(stop.time_window_start) + " - " + formatTimeAMPM(stop.time_window_end);
+            } else if (isDepot) {
+                timeWindowText = "Depot Location";
+            } else {
+                timeWindowText = "No time constraints";
+            }
+  
+            // Add traffic info to popup if available
+            var trafficText = "";
+            if (stop.traffic_factor && stop.traffic_factor > 1.0) {
+                trafficText = `<br><span class="text-danger">Traffic Factor: ${stop.traffic_factor}x</span>`;
+            }
+  
+            // Add fuel info to popup if available
+            var fuelText = "";
+            if (stop.leg_fuel) {
+                fuelText = `<br><span class="text-primary">Fuel: ${stop.leg_fuel.toFixed(2)} L</span>`;
+            }
+  
+            var marker = L.marker([stop.latitude, stop.longitude], {icon: markerIcon})
+                .addTo(map)
+                .bindPopup(
+                    "<strong>" + stop.name + "</strong><br>" +
+                    timeWindowText + "<br>" +
+                    "Stop #" + (stopIndex + 1) +
+                    trafficText +
+                    fuelText
+                );
+  
+            markers.push(marker);
+            routePoints.push([stop.latitude, stop.longitude]);
+            bounds.extend([stop.latitude, stop.longitude]);
+        });
+  
+        // Add polyline for the route
+        var routeLine = L.polyline(routePoints, {
+            color: routeColor,
+            weight: 4,
+            opacity: 0.7,
+            lineJoin: 'round'
+        }).addTo(map);
+  
+        // Add route number to polyline
+        var routeCenter = routeLine.getBounds().getCenter();
+        var label = vehicleRoute.vehicle_type ? `${vehicleRoute.vehicle_type} ${index + 1}` : `Vehicle ${index + 1}`;
+  
+        L.marker(routeCenter, {
+            icon: L.divIcon({
+                html: `<div style="background-color: ${routeColor}; color: white; border-radius: 4px; padding: 3px 8px; font-weight: bold;">${label}</div>`,
+                className: '',
+                iconSize: [80, 20]
+            })
+        }).addTo(map);
+    });
+  
+    // Fit map to show all markers
+    if (bounds.isValid()) {
+        map.fitBounds(bounds);
+    }
+  </script>
+  
+  <!-- Add fuel efficiency charts -->
+  <script src="{{ url_for('static', filename='js/fuel_efficiency_chart.js') }}"></script>
+  <script>
+    // Initialize fuel efficiency visualizations after map and routes are loaded
+    document.addEventListener("DOMContentLoaded", function () {
+      // Wait a second to ensure everything is loaded
+      setTimeout(function () {
+        // Initialize fuel efficiency visualizations
+        if (typeof initFuelEfficiencyChart === "function") {
+          initFuelEfficiencyChart(routeData);
+          createFuelBreakdownChart(routeData);
+        }
+      }, 1000);
+    });
+  </script>
+  
+  <!-- Traffic visualization script -->
+  <script src="{{ url_for('static', filename='js/traffic_map.js') }}"></script>
+  <script>
+    // Wait for map and routes to be fully loaded
+    document.addEventListener("DOMContentLoaded", function () {
+      setTimeout(function () {
+        // Initialize traffic visualization
+        if (typeof map !== "undefined" && typeof routeData !== "undefined") {
+          addTrafficToRouteMap(map, routeData);
+        }
+      }, 1000); // Short delay to ensure map is ready
+    });
+  </script>
+  {% endblock %}

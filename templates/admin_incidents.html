@@ -1,0 +1,915 @@
+{% extends "base.html" %} {% block title %}Incident Management{% endblock %} {%
+block head %}
+<style>
+  .incident-card {
+    border-left: 4px solid #f39c12;
+    transition: all 0.2s ease;
+  }
+
+  .incident-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+  }
+
+  .incident-card.resolved {
+    border-left-color: #2ecc71;
+    opacity: 0.8;
+  }
+
+  .incident-map {
+    height: 300px;
+    border-radius: 5px;
+    margin-bottom: 15px;
+  }
+
+  .incident-timeline {
+    position: relative;
+    padding-left: 30px;
+    margin-bottom: 20px;
+  }
+
+  .incident-timeline::before {
+    content: "";
+    position: absolute;
+    left: 9px;
+    top: 0;
+    height: 100%;
+    width: 2px;
+    background-color: #e1e1e1;
+  }
+
+  .timeline-item {
+    position: relative;
+    padding-bottom: 15px;
+  }
+
+  .timeline-indicator {
+    position: absolute;
+    left: -30px;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background-color: #3498db;
+    text-align: center;
+    line-height: 20px;
+    color: white;
+    font-size: 10px;
+  }
+
+  .timeline-content {
+    background-color: #f8f9fa;
+    padding: 10px 15px;
+    border-radius: 5px;
+  }
+
+  .active-incident {
+    animation: pulse-border 2s infinite;
+  }
+
+  @keyframes pulse-border {
+    0% {
+      border-left-color: #f39c12;
+    }
+    50% {
+      border-left-color: #e74c3c;
+    }
+    100% {
+      border-left-color: #f39c12;
+    }
+  }
+</style>
+{% endblock %} {% block content %}
+<div class="container-fluid">
+  <div class="row mb-4">
+    <div class="col-md-12">
+      <h1>Incident Management</h1>
+      <p class="text-muted">
+        Monitor and manage driver incidents and route transfers
+      </p>
+    </div>
+  </div>
+
+  <div class="row">
+    <!-- Map Overview -->
+    <div class="col-md-7">
+      <div class="card mb-4">
+        <div class="card-header">
+          <h5 class="card-title mb-0">Incident Map</h5>
+        </div>
+        <div class="card-body p-0">
+          <div id="incidents-map" style="height: 600px"></div>
+        </div>
+      </div>
+
+      <div class="row">
+        <div class="col-md-4">
+          <div class="card">
+            <div class="card-body text-center">
+              <h3 id="active-incidents-count">0</h3>
+              <p class="text-muted mb-0">Active Incidents</p>
+            </div>
+          </div>
+        </div>
+        <div class="col-md-4">
+          <div class="card">
+            <div class="card-body text-center">
+              <h3 id="pending-transfers-count">0</h3>
+              <p class="text-muted mb-0">Pending Transfers</p>
+            </div>
+          </div>
+        </div>
+        <div class="col-md-4">
+          <div class="card">
+            <div class="card-body text-center">
+              <h3 id="available-drivers-count">0</h3>
+              <p class="text-muted mb-0">Available Drivers</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Incident List -->
+    <div class="col-md-5">
+      <div class="card">
+        <div
+          class="card-header d-flex justify-content-between align-items-center"
+        >
+          <h5 class="card-title mb-0">Recent Incidents</h5>
+          <div>
+            <button
+              class="btn btn-sm btn-outline-primary"
+              id="refresh-incidents-btn"
+            >
+              <i class="fas fa-sync-alt me-1"></i>Refresh
+            </button>
+          </div>
+        </div>
+        <div class="card-body p-0">
+          <div class="list-group list-group-flush" id="incidents-list">
+            <div class="text-center py-5">
+              <div class="spinner-border text-primary" role="status">
+                <span class="visually-hidden">Loading...</span>
+              </div>
+              <p class="mt-2">Loading incidents...</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Incident Detail Modal -->
+<div
+  class="modal fade"
+  id="incidentDetailModal"
+  tabindex="-1"
+  aria-labelledby="incidentDetailModalLabel"
+  aria-hidden="true"
+>
+  <div class="modal-dialog modal-dialog-centered modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="incidentDetailModalLabel">
+          Incident Details
+        </h5>
+        <button
+          type="button"
+          class="btn-close"
+          data-bs-dismiss="modal"
+          aria-label="Close"
+        ></button>
+      </div>
+      <div class="modal-body">
+        <div class="row">
+          <div class="col-md-6">
+            <div class="mb-3">
+              <label class="form-label">Driver</label>
+              <div class="input-group">
+                <span class="input-group-text"
+                  ><i class="fas fa-user"></i
+                ></span>
+                <input
+                  type="text"
+                  class="form-control"
+                  id="incident-driver-name"
+                  readonly
+                />
+              </div>
+            </div>
+            <div class="mb-3">
+              <label class="form-label">Incident Type</label>
+              <div class="input-group">
+                <span class="input-group-text"
+                  ><i class="fas fa-exclamation-triangle"></i
+                ></span>
+                <input
+                  type="text"
+                  class="form-control"
+                  id="incident-type"
+                  readonly
+                />
+              </div>
+            </div>
+            <div class="mb-3">
+              <label class="form-label">Reported At</label>
+              <div class="input-group">
+                <span class="input-group-text"
+                  ><i class="fas fa-clock"></i
+                ></span>
+                <input
+                  type="text"
+                  class="form-control"
+                  id="incident-reported-at"
+                  readonly
+                />
+              </div>
+            </div>
+            <div class="mb-3">
+              <label class="form-label">Description</label>
+              <textarea
+                class="form-control"
+                id="incident-description"
+                rows="3"
+                readonly
+              ></textarea>
+            </div>
+          </div>
+          <div class="col-md-6">
+            <div class="incident-map" id="incident-detail-map"></div>
+            <div class="mb-3">
+              <label class="form-label">Location</label>
+              <div class="input-group">
+                <span class="input-group-text"
+                  ><i class="fas fa-map-marker-alt"></i
+                ></span>
+                <input
+                  type="text"
+                  class="form-control"
+                  id="incident-location"
+                  readonly
+                />
+              </div>
+            </div>
+            <div class="mb-3">
+              <label class="form-label">Status</label>
+              <div class="input-group">
+                <span class="input-group-text"
+                  ><i class="fas fa-info-circle"></i
+                ></span>
+                <input
+                  type="text"
+                  class="form-control"
+                  id="incident-status"
+                  readonly
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <hr />
+
+        <!-- Transfer Information -->
+        <h5 class="mb-3">Route Transfer Status</h5>
+        <div id="transfer-status-container">
+          <!-- Will be populated dynamically -->
+        </div>
+
+        <div id="transfer-actions" class="mt-3 d-none">
+          <h6>Manually Assign Driver</h6>
+          <div class="row">
+            <div class="col-md-8">
+              <select class="form-select" id="available-drivers-select">
+                <option value="" selected disabled>Select driver...</option>
+              </select>
+            </div>
+            <div class="col-md-4">
+              <button class="btn btn-primary w-100" id="assign-driver-btn">
+                <i class="fas fa-user-plus me-1"></i>Assign
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Incident Timeline -->
+        <h5 class="mt-4 mb-3">Incident Timeline</h5>
+        <div class="incident-timeline" id="incident-timeline">
+          <!-- Will be populated dynamically -->
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+          Close
+        </button>
+        <button type="button" class="btn btn-success" id="resolve-incident-btn">
+          <i class="fas fa-check-circle me-1"></i>Mark as Resolved
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %} {% block scripts %}
+<script>
+  document.addEventListener("DOMContentLoaded", function () {
+    // Initialize map
+    const map = L.map("incidents-map").setView([40.7128, -74.006], 10);
+
+    // Add OpenStreetMap tiles
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      attribution:
+        '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+    }).addTo(map);
+
+    // Store markers and incidents
+    let markers = [];
+    let incidents = [];
+
+    // Load incidents
+    loadIncidents();
+
+    // Set up refresh button
+    document
+      .getElementById("refresh-incidents-btn")
+      .addEventListener("click", loadIncidents);
+
+    // Load incident data
+    function loadIncidents() {
+      fetch("/api/admin/incidents", {
+        headers: {
+          "Content-Type": "application/json",
+        },
+      })
+        .then((response) => response.json())
+        .then((data) => {
+          incidents = data.incidents;
+          updateIncidentsList(incidents);
+          updateIncidentsMap(incidents);
+          updateIncidentCounts(data.counts);
+        })
+        .catch((error) => {
+          console.error("Error loading incidents:", error);
+          document.getElementById("incidents-list").innerHTML = `
+                    <div class="text-center py-4">
+                        <i class="fas fa-exclamation-circle fa-3x text-danger mb-3"></i>
+                        <p>Failed to load incidents. Please try again.</p>
+                    </div>
+                `;
+        });
+    }
+
+    // Update incidents list
+    function updateIncidentsList(incidents) {
+      const container = document.getElementById("incidents-list");
+      container.innerHTML = "";
+
+      if (incidents.length === 0) {
+        container.innerHTML = `
+                    <div class="text-center py-4">
+                        <i class="fas fa-check-circle fa-3x text-success mb-3"></i>
+                        <p>No active incidents at this time.</p>
+                    </div>
+                `;
+        return;
+      }
+
+      incidents.forEach((incident) => {
+        const incidentDate = new Date(incident.reported_at);
+        const formattedDate = incidentDate.toLocaleString();
+
+        // Determine status class
+        let statusClass = "";
+        let statusBadge = "";
+
+        if (incident.status === "resolved") {
+          statusClass = "resolved";
+          statusBadge = '<span class="badge bg-success">Resolved</span>';
+        } else if (incident.status === "assistance_assigned") {
+          statusClass = "";
+          statusBadge = '<span class="badge bg-primary">Help Assigned</span>';
+        } else {
+          statusClass = "active-incident";
+          statusBadge = '<span class="badge bg-danger">Active</span>';
+        }
+
+        // Create incident card
+        const card = document.createElement("a");
+        card.className = `list-group-item list-group-item-action incident-card ${statusClass}`;
+        card.href = "#";
+        card.dataset.incidentId = incident.id;
+
+        card.innerHTML = `
+                    <div class="d-flex justify-content-between align-items-start">
+                        <div>
+                            <h6 class="mb-1">${incident.driver_name}</h6>
+                            <p class="mb-1 small">${formatIncidentType(
+                              incident.incident_type
+                            )}</p>
+                            <small class="text-muted">${formattedDate}</small>
+                        </div>
+                        <div class="text-end">
+                            ${statusBadge}
+                            <div class="mt-2 small text-muted">${
+                              incident.transfers.length
+                            } transfers</div>
+                        </div>
+                    </div>
+                `;
+
+        card.addEventListener("click", function (e) {
+          e.preventDefault();
+          showIncidentDetails(incident.id);
+        });
+
+        container.appendChild(card);
+      });
+    }
+
+    // Update incidents map
+    function updateIncidentsMap(incidents) {
+      // Clear existing markers
+      markers.forEach((marker) => map.removeLayer(marker));
+      markers = [];
+
+      // Bounds for fitting the map
+      const bounds = L.latLngBounds();
+
+      // Add markers for each incident
+      incidents.forEach((incident) => {
+        // Skip if no location data
+        if (
+          !incident.location ||
+          !incident.location.lat ||
+          !incident.location.lng
+        ) {
+          return;
+        }
+
+        // Determine marker style
+        let markerClass = "incident-marker";
+        let iconHtml = '<i class="fas fa-exclamation-triangle"></i>';
+
+        if (incident.status === "resolved") {
+          markerClass += " resolved";
+          iconHtml = '<i class="fas fa-check"></i>';
+        } else if (incident.status === "assistance_assigned") {
+          markerClass += " assigned";
+          iconHtml = '<i class="fas fa-user-plus"></i>';
+        } else {
+          markerClass += " active";
+        }
+
+        // Create marker
+        const marker = L.marker(
+          [incident.location.lat, incident.location.lng],
+          {
+            icon: L.divIcon({
+              html: `<div class="${markerClass}">${iconHtml}</div>`,
+              className: "",
+              iconSize: [30, 30],
+            }),
+          }
+        ).addTo(map);
+
+        // Add popup
+        marker.bindPopup(`
+                    <strong>${incident.driver_name}</strong><br>
+                    ${formatIncidentType(incident.incident_type)}<br>
+                    <small>${new Date(
+                      incident.reported_at
+                    ).toLocaleString()}</small><br>
+                    <button class="btn btn-sm btn-primary mt-2 view-incident-btn" data-incident-id="${
+                      incident.id
+                    }">
+                        View Details
+                    </button>
+                `);
+
+        // Add click handler for popup button
+        marker.on("popupopen", function () {
+          document
+            .querySelector(
+              `.view-incident-btn[data-incident-id="${incident.id}"]`
+            )
+            .addEventListener("click", function () {
+              showIncidentDetails(incident.id);
+            });
+        });
+
+        // Add to bounds
+        bounds.extend([incident.location.lat, incident.location.lng]);
+
+        // Store marker
+        markers.push(marker);
+      });
+
+      // Fit map to show all markers
+      if (bounds.isValid()) {
+        map.fitBounds(bounds);
+      }
+    }
+
+    // Update incident counts
+    function updateIncidentCounts(counts) {
+      document.getElementById("active-incidents-count").textContent =
+        counts.active || 0;
+      document.getElementById("pending-transfers-count").textContent =
+        counts.pending_transfers || 0;
+      document.getElementById("available-drivers-count").textContent =
+        counts.available_drivers || 0;
+    }
+
+    // Show incident details
+    function showIncidentDetails(incidentId) {
+      // Find incident data
+      const incident = incidents.find((inc) => inc.id == incidentId);
+      if (!incident) {
+        return;
+      }
+
+      // Update modal fields
+      document.getElementById("incident-driver-name").value =
+        incident.driver_name;
+      document.getElementById("incident-type").value = formatIncidentType(
+        incident.incident_type
+      );
+      document.getElementById("incident-reported-at").value = new Date(
+        incident.reported_at
+      ).toLocaleString();
+      document.getElementById("incident-description").value =
+        incident.description || "No description provided";
+      document.getElementById("incident-location").value =
+        incident.location.address ||
+        `${incident.location.lat}, ${incident.location.lng}`;
+      document.getElementById("incident-status").value = formatStatus(
+        incident.status
+      );
+
+      // Setup incident map
+      const detailMap = L.map("incident-detail-map").setView(
+        [incident.location.lat, incident.location.lng],
+        14
+      );
+
+      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+        attribution:
+          '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+      }).addTo(detailMap);
+
+      L.marker([incident.location.lat, incident.location.lng]).addTo(detailMap);
+
+      // Show transfer status
+      updateTransferStatus(incident);
+
+      // Show incident timeline
+      updateIncidentTimeline(incident);
+
+      // Show or hide resolve button
+      const resolveBtn = document.getElementById("resolve-incident-btn");
+      if (incident.status === "resolved") {
+        resolveBtn.classList.add("d-none");
+      } else {
+        resolveBtn.classList.remove("d-none");
+        resolveBtn.dataset.incidentId = incident.id;
+
+        // Add event listener
+        resolveBtn.addEventListener("click", function () {
+          resolveIncident(incident.id);
+        });
+      }
+
+      // Show modal
+      const modal = new bootstrap.Modal(
+        document.getElementById("incidentDetailModal")
+      );
+      modal.show();
+
+      // Fix map rendering issue
+      setTimeout(() => {
+        detailMap.invalidateSize();
+      }, 300);
+    }
+
+    // Update transfer status UI
+    function updateTransferStatus(incident) {
+      const container = document.getElementById("transfer-status-container");
+      const actionsContainer = document.getElementById("transfer-actions");
+
+      if (incident.transfers && incident.transfers.length > 0) {
+        let transferContent = "";
+        let needsAssignment = false;
+
+        incident.transfers.forEach((transfer) => {
+          let statusBadge = "";
+          switch (transfer.status) {
+            case "pending":
+              statusBadge = '<span class="badge bg-warning">Pending</span>';
+              needsAssignment = true;
+              break;
+            case "accepted":
+              statusBadge = '<span class="badge bg-success">Accepted</span>';
+              break;
+            case "rejected":
+              statusBadge = '<span class="badge bg-danger">Rejected</span>';
+              break;
+            case "completed":
+              statusBadge = '<span class="badge bg-primary">Completed</span>';
+              break;
+          }
+
+          transferContent += `
+                        <div class="card mb-3">
+                            <div class="card-body">
+                                <div class="d-flex justify-content-between align-items-center mb-2">
+                                    <div>
+                                        <h6 class="mb-0">Transfer #${
+                                          transfer.id
+                                        }</h6>
+                                        <small class="text-muted">Created ${new Date(
+                                          transfer.created_at
+                                        ).toLocaleString()}</small>
+                                    </div>
+                                    <div>
+                                        ${statusBadge}
+                                    </div>
+                                </div>
+                                <div class="row mt-3">
+                                    <div class="col-6">
+                                        <strong>From:</strong> ${
+                                          transfer.original_driver.name
+                                        }
+                                    </div>
+                                    <div class="col-6">
+                                        <strong>To:</strong> ${
+                                          transfer.new_driver.name
+                                        }
+                                    </div>
+                                </div>
+                                <div class="mt-2">
+                                    <strong>Stops:</strong> ${
+                                      transfer.stop_count
+                                    } 
+                                    (${
+                                      transfer.vehicle_requirements.type
+                                        ? "Requires " +
+                                          transfer.vehicle_requirements.type
+                                        : "Any vehicle"
+                                    })
+                                </div>
+                            </div>
+                        </div>
+                    `;
+        });
+
+        container.innerHTML = transferContent;
+
+        // Show/hide manual assignment section
+        if (needsAssignment && incident.status !== "resolved") {
+          actionsContainer.classList.remove("d-none");
+          // Load available drivers
+          loadAvailableDrivers(incident.id);
+        } else {
+          actionsContainer.classList.add("d-none");
+        }
+      } else {
+        container.innerHTML = `
+                    <div class="alert alert-info">
+                        <i class="fas fa-info-circle me-2"></i>
+                        No transfers have been created for this incident.
+                    </div>
+                `;
+        actionsContainer.classList.add("d-none");
+      }
+    }
+
+    // Update incident timeline
+    function updateIncidentTimeline(incident) {
+      const container = document.getElementById("incident-timeline");
+      container.innerHTML = "";
+
+      // Add reported event
+      const reportedItem = createTimelineItem(
+        "Incident Reported",
+        new Date(incident.reported_at).toLocaleString(),
+        "fas fa-exclamation-triangle",
+        "warning"
+      );
+      container.appendChild(reportedItem);
+
+      // Add transfer events
+      if (incident.transfers && incident.transfers.length > 0) {
+        incident.transfers.forEach((transfer) => {
+          // Transfer created
+          const createdItem = createTimelineItem(
+            "Transfer Created",
+            new Date(transfer.created_at).toLocaleString(),
+            "fas fa-share",
+            "info"
+          );
+          container.appendChild(createdItem);
+
+          // Transfer accepted (if applicable)
+          if (
+            transfer.status === "accepted" ||
+            transfer.status === "completed"
+          ) {
+            const acceptedItem = createTimelineItem(
+              `Transfer Accepted by ${transfer.new_driver.name}`,
+              new Date(transfer.accepted_at).toLocaleString(),
+              "fas fa-user-check",
+              "success"
+            );
+            container.appendChild(acceptedItem);
+          }
+
+          // Transfer completed (if applicable)
+          if (transfer.status === "completed") {
+            const completedItem = createTimelineItem(
+              "Transfer Completed",
+              new Date(transfer.completed_at).toLocaleString(),
+              "fas fa-check-circle",
+              "primary"
+            );
+            container.appendChild(completedItem);
+          }
+        });
+      }
+
+      // Add resolved event (if applicable)
+      if (incident.status === "resolved") {
+        const resolvedItem = createTimelineItem(
+          "Incident Resolved",
+          new Date(incident.resolved_at).toLocaleString(),
+          "fas fa-check-double",
+          "success"
+        );
+        container.appendChild(resolvedItem);
+      }
+    }
+
+    // Create timeline item
+    function createTimelineItem(title, time, icon, color) {
+      const item = document.createElement("div");
+      item.className = "timeline-item";
+
+      item.innerHTML = `
+                <div class="timeline-indicator bg-${color}">
+                    <i class="${icon}"></i>
+                </div>
+                <div class="timeline-content">
+                    <h6 class="mb-1">${title}</h6>
+                    <small class="text-muted">${time}</small>
+                </div>
+            `;
+
+      return item;
+    }
+
+    // Load available drivers
+    function loadAvailableDrivers(incidentId) {
+      fetch(`/api/admin/incidents/${incidentId}/available-drivers`, {
+        headers: {
+          "Content-Type": "application/json",
+        },
+      })
+        .then((response) => response.json())
+        .then((data) => {
+          const select = document.getElementById("available-drivers-select");
+          select.innerHTML =
+            '<option value="" selected disabled>Select driver...</option>';
+
+          data.forEach((driver) => {
+            const option = document.createElement("option");
+            option.value = driver.id;
+            option.textContent = `${driver.name} (${
+              driver.vehicle || "No vehicle"
+            }) - ${driver.distance_km.toFixed(1)} km away`;
+            select.appendChild(option);
+          });
+
+          // Setup assign button
+          const assignBtn = document.getElementById("assign-driver-btn");
+          assignBtn.dataset.incidentId = incidentId;
+
+          // Add event listener
+          assignBtn.addEventListener("click", function () {
+            const driverId = select.value;
+            if (driverId) {
+              assignDriver(incidentId, driverId);
+            }
+          });
+        })
+        .catch((error) => {
+          console.error("Error loading available drivers:", error);
+        });
+    }
+
+    // Assign driver
+    function assignDriver(incidentId, driverId) {
+      // Disable assign button
+      const assignBtn = document.getElementById("assign-driver-btn");
+      assignBtn.disabled = true;
+      assignBtn.innerHTML =
+        '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Assigning...';
+
+      fetch(`/api/admin/incidents/${incidentId}/assign-driver`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          driver_id: driverId,
+        }),
+      })
+        .then((response) => response.json())
+        .then((data) => {
+          // Reload incidents
+          loadIncidents();
+
+          // Close modal
+          bootstrap.Modal.getInstance(
+            document.getElementById("incidentDetailModal")
+          ).hide();
+
+          // Show success message
+          alert("Driver assigned successfully!");
+        })
+        .catch((error) => {
+          console.error("Error assigning driver:", error);
+          alert("Failed to assign driver. Please try again.");
+
+          // Re-enable button
+          assignBtn.disabled = false;
+          assignBtn.innerHTML = '<i class="fas fa-user-plus me-1"></i>Assign';
+        });
+    }
+
+    // Resolve incident
+    function resolveIncident(incidentId) {
+      if (
+        !confirm("Are you sure you want to mark this incident as resolved?")
+      ) {
+        return;
+      }
+
+      // Disable resolve button
+      const resolveBtn = document.getElementById("resolve-incident-btn");
+      resolveBtn.disabled = true;
+      resolveBtn.innerHTML =
+        '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Resolving...';
+
+      fetch(`/api/admin/incidents/${incidentId}/resolve`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+      })
+        .then((response) => response.json())
+        .then((data) => {
+          // Reload incidents
+          loadIncidents();
+
+          // Close modal
+          bootstrap.Modal.getInstance(
+            document.getElementById("incidentDetailModal")
+          ).hide();
+
+          // Show success message
+          alert("Incident resolved successfully!");
+        })
+        .catch((error) => {
+          console.error("Error resolving incident:", error);
+          alert("Failed to resolve incident. Please try again.");
+
+          // Re-enable button
+          resolveBtn.disabled = false;
+          resolveBtn.innerHTML =
+            '<i class="fas fa-check-circle me-1"></i>Mark as Resolved';
+        });
+    }
+
+    // Helper function to format incident type
+    function formatIncidentType(type) {
+      return type
+        .split("_")
+        .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+        .join(" ");
+    }
+
+    // Helper function to format status
+    function formatStatus(status) {
+      switch (status) {
+        case "reported":
+          return "Reported (Active)";
+        case "assistance_assigned":
+          return "Assistance Assigned";
+        case "resolved":
+          return "Resolved";
+        default:
+          return status.charAt(0).toUpperCase() + status.slice(1);
+      }
+    }
+  });
+</script>
+{% endblock %}

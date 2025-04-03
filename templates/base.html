@@ -31,6 +31,31 @@
       href="{{ url_for('static', filename='css/style.css') }}"
     />
 
+    <style>
+      /* Assistance alert styling */
+      #assistance-alert {
+        box-shadow: 0 3px 10px rgba(0, 0, 0, 0.2);
+        animation: pulse 2s infinite;
+      }
+      
+      @keyframes pulse {
+        0% { box-shadow: 0 3px 10px rgba(0, 0, 0, 0.2); }
+        50% { box-shadow: 0 3px 15px rgba(220, 53, 69, 0.6); }
+        100% { box-shadow: 0 3px 10px rgba(0, 0, 0, 0.2); }
+      }
+      
+      .assistance-badge .btn {
+        animation: shake 4s ease-in-out infinite;
+      }
+      
+      @keyframes shake {
+        0%, 100% { transform: translateX(0); }
+        2%, 6% { transform: translateX(-3px); }
+        4%, 8% { transform: translateX(3px); }
+        10% { transform: translateX(0); }
+      }
+    </style>
+
     {% block head %}{% endblock %}
   </head>
   <body>
@@ -50,25 +75,52 @@
         <div class="collapse navbar-collapse" id="navbarNav">
           <ul class="navbar-nav">
             <li class="nav-item">
-              <a
-                class="nav-link {% if request.path == url_for('index') %}active{% endif %}"
-                href="{{ url_for('index') }}"
-                >Home</a
-              >
+              <a class="nav-link {% if request.path == url_for('index') %}active{% endif %}" href="{{ url_for('index') }}">
+                <i class="fas fa-home me-1"></i>Home
+              </a>
             </li>
             <li class="nav-item">
-              <a
-                class="nav-link {% if request.path == url_for('dashboard') %}active{% endif %}"
-                href="{{ url_for('dashboard') }}"
-                >Dashboard</a
-              >
+              <a class="nav-link {% if request.path == url_for('dashboard') %}active{% endif %}" href="{{ url_for('dashboard') }}">
+                <i class="fas fa-tachometer-alt me-1"></i>Dashboard
+              </a>
             </li>
             <li class="nav-item">
-              <a
-                class="nav-link {% if 'analytics' in request.path %}active{% endif %}"
-                href="{{ url_for('analytics') }}"
-                >Analytics</a
-              >
+              <a class="nav-link {% if 'analytics' in request.path %}active{% endif %}" href="{{ url_for('analytics') }}">
+                <i class="fas fa-chart-line me-1"></i>Analytics
+              </a>
+            </li>
+            <!-- New Items -->
+            <li class="nav-item">
+              <a class="nav-link {% if 'admin/incidents' in request.path %}active{% endif %}" href="{{ url_for('admin_incidents_dashboard') }}">
+                <i class="fas fa-exclamation-triangle me-1"></i>Incidents
+                <span class="badge bg-danger rounded-pill incident-count d-none">0</span>
+              </a>
+            </li>
+            <li class="nav-item">
+              <a class="nav-link {% if 'admin/drivers' in request.path %}active{% endif %}" href="{{ url_for('admin_drivers') }}">
+                <i class="fas fa-users me-1"></i>Drivers
+              </a>
+            </li>
+          </ul>
+          
+          <!-- Add this notification bell at the end of the navbar -->
+          <ul class="navbar-nav ms-auto">
+            <li class="nav-item dropdown">
+              <a class="nav-link dropdown-toggle position-relative" href="#" id="notificationsDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                <i class="fas fa-bell"></i>
+                <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger notification-count d-none">
+                  0
+                </span>
+              </a>
+              <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="notificationsDropdown" id="notifications-container">
+                <li><div class="dropdown-header">Notifications</div></li>
+                <li><hr class="dropdown-divider"></li>
+                <li>
+                  <a class="dropdown-item text-center text-muted" href="#">
+                    No new notifications
+                  </a>
+                </li>
+              </ul>
             </li>
           </ul>
         </div>
@@ -105,5 +157,465 @@
     <!-- Add this at the end of your base.html template before closing body tag -->
     <script src="{{ url_for('static', filename='js/reroute_notification.js') }}"></script>
     {% endblock %}
+
+    <!-- Assistance Requests Modal (for drivers) -->
+    <div class="modal fade" id="assistanceRequestsModal" tabindex="-1" aria-labelledby="assistanceRequestsModalLabel" aria-hidden="true">
+      <div class="modal-dialog modal-dialog-centered modal-lg">
+        <div class="modal-content">
+          <div class="modal-header bg-warning text-dark">
+            <h5 class="modal-title" id="assistanceRequestsModalLabel">
+              <i class="fas fa-exclamation-triangle me-2"></i>Drivers Needing Help
+            </h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+          </div>
+          <div class="modal-body">
+            <div id="assistance-requests-container">
+              <!-- Request cards will be inserted here -->
+              <div class="text-center py-4">
+                <i class="fas fa-search fa-3x text-muted mb-3"></i>
+                <p>No assistance requests available at this time.</p>
+              </div>
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Toast Container for Notifications -->
+    <div id="toast-container" class="toast-container position-fixed bottom-0 end-0 p-3"></div>
+
+    <script>
+      // Add these functions to handle driver notification checks globally
+      document.addEventListener('DOMContentLoaded', function() {
+        // If driver is logged in, start global monitoring
+        if (localStorage.getItem('driver_token')) {
+          // Check for driver notifications on page load
+          checkDriverNotifications();
+          
+          // Start location tracking if not already running
+          if (!window.locationTrackingActive) {
+            startDriverLocationUpdates();
+            window.locationTrackingActive = true;
+          }
+          
+          // Set up periodic checks
+          setInterval(checkDriverNotifications, 30000); // Every 30 seconds
+          
+          // Initialize global assistance request checker for drivers
+          checkGlobalAssistanceRequests();
+        }
+      });
+
+      // Function to check for driver notifications
+      function checkDriverNotifications() {
+        if (!localStorage.getItem('driver_token')) return;
+        
+        fetch('/api/notifications?user_type=driver', {
+          headers: {
+            'Authorization': 'Bearer ' + localStorage.getItem('driver_token')
+          }
+        })
+        .then(response => response.json())
+        .then(data => {
+          // Update notification badge if notifications exist
+          const badge = document.querySelector('.notification-count');
+          if (badge && data.unread_count > 0) {
+            badge.textContent = data.unread_count;
+            badge.classList.remove('d-none');
+          }
+          
+          // If we have assistance notifications, show a more prominent alert
+          const assistanceNotifications = data.notifications.filter(n => 
+            n.notification_type === 'assistance_needed' && !n.is_read);
+              
+          if (assistanceNotifications.length > 0) {
+            showAssistanceAlert(assistanceNotifications[0]);
+          }
+          
+          // Update notification dropdown
+          updateNotificationDropdown(data.notifications);
+        })
+        .catch(error => console.error('Error checking notifications:', error));
+      }
+
+      // Function to update notification dropdown
+      function updateNotificationDropdown(notifications) {
+        const container = document.getElementById('notifications-container');
+        
+        // Keep the header items
+        const headerItems = container.querySelectorAll('.dropdown-header, .dropdown-divider');
+        container.innerHTML = '';
+        
+        // Add back header items
+        headerItems.forEach(item => container.appendChild(item));
+        
+        if (notifications.length === 0) {
+          const emptyItem = document.createElement('li');
+          emptyItem.innerHTML = '<a class="dropdown-item text-center text-muted" href="#">No new notifications</a>';
+          container.appendChild(emptyItem);
+          return;
+        }
+        
+        // Add notifications
+        notifications.slice(0, 5).forEach(notification => {
+          const item = document.createElement('li');
+          
+          // Determine icon based on notification type
+          let icon = 'bell';
+          if (notification.notification_type === 'assistance_needed') {
+            icon = 'exclamation-triangle';
+          } else if (notification.notification_type === 'assistance_assigned') {
+            icon = 'check-circle';
+          }
+          
+          // Format time
+          const time = new Date(notification.created_at);
+          const timeText = time.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+          
+          item.innerHTML = `
+            <a class="dropdown-item ${notification.is_read ? '' : 'fw-bold'}" href="#" onclick="markNotificationAsRead(${notification.id}); return false;">
+              <div class="d-flex align-items-center">
+                <i class="fas fa-${icon} me-2 ${notification.is_read ? 'text-muted' : 'text-primary'}"></i>
+                <div class="flex-grow-1">
+                  <div>${notification.content}</div>
+                  <small class="text-muted">${timeText}</small>
+                </div>
+              </div>
+            </a>
+          `;
+          
+          container.appendChild(item);
+        });
+        
+        // Add view all link if there are more than 5
+        if (notifications.length > 5) {
+          const viewAllItem = document.createElement('li');
+          viewAllItem.innerHTML = '<hr class="dropdown-divider"><a class="dropdown-item text-center" href="/notifications">View all notifications</a>';
+          container.appendChild(viewAllItem);
+        }
+      }
+
+      // Function to mark notification as read
+      function markNotificationAsRead(notificationId) {
+        fetch(`/api/notifications/${notificationId}/read`, {
+          method: 'POST',
+          headers: {
+            'Authorization': 'Bearer ' + localStorage.getItem('driver_token')
+          }
+        })
+        .then(response => response.json())
+        .then(data => {
+          // Refresh notifications
+          checkDriverNotifications();
+        })
+        .catch(error => console.error('Error marking notification as read:', error));
+      }
+
+      // Function to show a prominent assistance alert
+      function showAssistanceAlert(notification) {
+        // Remove existing alert if there is one
+        let existingAlert = document.getElementById('assistance-alert');
+        if (existingAlert) {
+          existingAlert.remove();
+        }
+        
+        // Create a fixed alert at the top of the screen
+        let alertDiv = document.createElement('div');
+        alertDiv.id = 'assistance-alert';
+        alertDiv.className = 'position-fixed top-0 start-0 w-100 bg-danger text-white p-2 text-center';
+        alertDiv.style.zIndex = '9999';
+        
+        alertDiv.innerHTML = `
+          <strong>ASSISTANCE NEEDED!</strong> ${notification.content}
+          <button class="btn btn-sm btn-light ms-3" onclick="window.location.href='/driver/dashboard'">
+            View Details
+          </button>
+          <button class="btn btn-sm btn-outline-light ms-2" onclick="dismissAssistanceAlert()">
+            Dismiss
+          </button>
+        `;
+        
+        document.body.appendChild(alertDiv);
+      }
+
+      // Function to dismiss the assistance alert
+      function dismissAssistanceAlert() {
+        const alert = document.getElementById('assistance-alert');
+        if (alert) {
+          alert.remove();
+        }
+      }
+
+      // Add location tracking for all logged-in drivers
+      function startDriverLocationUpdates() {
+        // Check if geolocation is available
+        if (!navigator.geolocation) {
+          console.log('Geolocation not available');
+          return;
+        }
+        
+        // Function to update driver location
+        function updateDriverLocation() {
+          navigator.geolocation.getCurrentPosition(
+            // Success callback
+            (position) => {
+              const { latitude, longitude } = position.coords;
+              
+              // Send location to server
+              fetch('/api/driver/update-location', {
+                method: 'POST',
+                headers: {
+                  'Authorization': 'Bearer ' + localStorage.getItem('driver_token'),
+                  'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                  latitude: latitude,
+                  longitude: longitude
+                })
+              })
+              .catch(error => {
+                console.error('Error updating location:', error);
+              });
+            },
+            // Error callback
+            (error) => {
+              console.error('Geolocation error:', error);
+            },
+            // Options
+            {
+              enableHighAccuracy: true,
+              maximumAge: 30000,
+              timeout: 10000
+            }
+          );
+        }
+        
+        // Update location immediately and then every 2 minutes
+        updateDriverLocation();
+        setInterval(updateDriverLocation, 120000); // Every 2 minutes
+      }
+
+      // Check for assistance requests (global handler)
+      function checkGlobalAssistanceRequests() {
+        // Only run this check if we're a driver (check for token)
+        if (!localStorage.getItem('driver_token')) {
+          return;
+        }
+
+        fetch('/api/driver/assistance-requests', {
+          headers: {
+            'Authorization': 'Bearer ' + localStorage.getItem('driver_token')
+          }
+        })
+        .then(response => {
+          if (!response.ok) {
+            throw new Error('Failed to check assistance requests');
+          }
+          return response.json();
+        })
+        .then(data => {
+          if (data && data.length > 0) {
+            // We have assistance requests - show notification badge
+            const badge = document.createElement('div');
+            badge.className = 'position-fixed top-0 end-0 m-3 assistance-badge';
+            badge.innerHTML = `
+              <button class="btn btn-warning" data-bs-toggle="modal" data-bs-target="#assistanceRequestsModal">
+                <i class="fas fa-exclamation-triangle me-1"></i>
+                Drivers Need Help (${data.length})
+              </button>
+            `;
+            
+            // Only add if not already present
+            if (!document.querySelector('.assistance-badge')) {
+              document.body.appendChild(badge);
+            }
+            
+            // Show toast notification for new requests
+            if (data.length > parseInt(localStorage.getItem('lastAssistanceCount') || 0)) {
+              showToast('Assistance Needed', 'A driver nearby needs help with their route.', 'warning');
+            }
+            
+            // Store current count
+            localStorage.setItem('lastAssistanceCount', data.length);
+            
+            // Update modal content
+            updateAssistanceRequestsModal(data);
+          } else {
+            // Remove badge if no requests
+            const badge = document.querySelector('.assistance-badge');
+            if (badge) {
+              badge.remove();
+            }
+            
+            // Reset count
+            localStorage.setItem('lastAssistanceCount', 0);
+          }
+        })
+        .catch(error => {
+          console.error('Error checking assistance requests:', error);
+        });
+        
+        // Check again in 30 seconds
+        setTimeout(checkGlobalAssistanceRequests, 30000);
+      }
+      
+      // Update assistance requests modal
+      function updateAssistanceRequestsModal(requests) {
+        const container = document.getElementById('assistance-requests-container');
+        if (!container) return;
+        
+        container.innerHTML = '';
+        
+        if (requests.length === 0) {
+          container.innerHTML = `
+            <div class="text-center py-4">
+              <i class="fas fa-search fa-3x text-muted mb-3"></i>
+              <p>No assistance requests available at this time.</p>
+            </div>
+          `;
+          return;
+        }
+        
+        // Add each request
+        requests.forEach(request => {
+          const incidentType = request.incident_type || 'Unknown issue';
+          const formattedType = incidentType.replace('_', ' ').split(' ')
+            .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+            .join(' ');
+          
+          const card = document.createElement('div');
+          card.className = 'card mb-3';
+          card.innerHTML = `
+            <div class="card-header bg-warning text-dark d-flex justify-content-between align-items-center">
+              <h6 class="mb-0">
+                <i class="fas fa-exclamation-triangle me-1"></i>
+                ${request.original_driver.name} needs assistance
+              </h6>
+              <span class="badge bg-danger">${request.stop_count} stops</span>
+            </div>
+            <div class="card-body">
+              <div class="mb-2">
+                <strong>Issue Type:</strong> ${formattedType}
+              </div>
+              <div class="mb-2">
+                <strong>Location:</strong> ${request.incident.location.address || 'Unknown location'}
+              </div>
+              <div class="mb-2">
+                <strong>Distance:</strong> ${request.distance_km ? request.distance_km.toFixed(1) + ' km away' : 'Unknown distance'}
+              </div>
+              <div class="mt-3 text-end">
+                <button class="btn btn-success" data-transfer-id="${request.id}" onclick="acceptAssistanceRequest(${request.id})">
+                  <i class="fas fa-check me-1"></i>I Can Help
+                </button>
+              </div>
+            </div>
+          `;
+          
+          container.appendChild(card);
+        });
+      }
+      
+      // Accept assistance request
+      function acceptAssistanceRequest(transferId) {
+        if (!confirm('Are you sure you want to help with this route? This will add additional stops to your current route.')) {
+          return;
+        }
+        
+        // Disable button
+        const button = document.querySelector(`button[data-transfer-id="${transferId}"]`);
+        if (button) {
+          button.disabled = true;
+          button.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Accepting...';
+        }
+        
+        fetch(`/api/driver/transfers/${transferId}/accept`, {
+          method: 'POST',
+          headers: {
+            'Authorization': 'Bearer ' + localStorage.getItem('driver_token')
+          }
+        })
+        .then(response => {
+          if (!response.ok) {
+            throw new Error('Failed to accept transfer');
+          }
+          return response.json();
+        })
+        .then(data => {
+          // Hide modal
+          const modal = bootstrap.Modal.getInstance(document.getElementById('assistanceRequestsModal'));
+          if (modal) modal.hide();
+          
+          // Show success message
+          showToast('Transfer Accepted', `You've accepted ${data.transfer.stop_count} additional stops.`, 'success');
+          
+          // Redirect if on driver route page
+          if (window.location.pathname.includes('/driver/route/')) {
+            setTimeout(() => {
+              window.location.reload();
+            }, 1500);
+          } else {
+            // Redirect to driver dashboard
+            setTimeout(() => {
+              window.location.href = '/driver/dashboard';
+            }, 1500);
+          }
+        })
+        .catch(error => {
+          console.error('Error accepting transfer:', error);
+          showToast('Error', 'Failed to accept transfer request. Please try again.', 'danger');
+          
+          // Re-enable button
+          if (button) {
+            button.disabled = false;
+            button.innerHTML = '<i class="fas fa-check me-1"></i>I Can Help';
+          }
+        });
+      }
+      
+      // Show toast notification
+      function showToast(title, message, type = 'info') {
+        if (typeof bootstrap === 'undefined' || !bootstrap.Toast) {
+          console.error('Bootstrap toast not available');
+          return;
+        }
+        
+        // Create toast container if it doesn't exist
+        let toastContainer = document.getElementById('toast-container');
+        if (!toastContainer) {
+          toastContainer = document.createElement('div');
+          toastContainer.id = 'toast-container';
+          toastContainer.className = 'toast-container position-fixed bottom-0 end-0 p-3';
+          document.body.appendChild(toastContainer);
+        }
+        
+        // Create toast
+        const toastId = 'toast-' + Date.now();
+        const toast = document.createElement('div');
+        toast.className = `toast align-items-center text-white bg-${type} border-0`;
+        toast.id = toastId;
+        toast.setAttribute('role', 'alert');
+        toast.setAttribute('aria-live', 'assertive');
+        toast.setAttribute('aria-atomic', 'true');
+        
+        toast.innerHTML = `
+          <div class="d-flex">
+            <div class="toast-body">
+              <strong>${title}</strong><br>${message}
+            </div>
+            <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
+          </div>
+        `;
+        
+        toastContainer.appendChild(toast);
+        
+        const toastInstance = new bootstrap.Toast(toast, {
+          delay: 5000
+        });
+        toastInstance.show();
+      }
+    </script>
   </body>
 </html>

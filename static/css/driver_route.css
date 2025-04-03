@@ -419,3 +419,91 @@ body {
     height: auto;
     object-fit: contain;
 }
+
+/* Emergency button styles */
+#emergency-btn {
+    background-color: #e74c3c;
+    border-color: #e74c3c;
+    transition: all 0.2s ease;
+}
+
+#emergency-btn:hover {
+    background-color: #c0392b;
+    border-color: #c0392b;
+}
+
+/* Emergency marker */
+.emergency-marker {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    background-color: #e74c3c;
+    border: 3px solid white;
+    color: white;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 0 10px rgba(0, 0, 0, 0.3);
+    animation: pulse-danger 1.5s infinite;
+}
+
+.emergency-marker i {
+    font-size: 20px;
+}
+
+@keyframes pulse-danger {
+    0% {
+        box-shadow: 0 0 0 0 rgba(231, 76, 60, 0.6);
+    }
+    70% {
+        box-shadow: 0 0 0 10px rgba(231, 76, 60, 0);
+    }
+    100% {
+        box-shadow: 0 0 0 0 rgba(231, 76, 60, 0);
+    }
+}
+
+/* Assistance badge */
+.assistance-badge {
+    z-index: 1000;
+}
+
+/* Assistance card */
+.assistance-card {
+    transition: all 0.2s ease;
+}
+
+.assistance-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+}
+
+/* Transferring animation */
+.transferring {
+    animation: transferring 1.5s infinite alternate;
+}
+
+@keyframes transferring {
+    0% {
+        opacity: 0.7;
+    }
+    100% {
+        opacity: 1;
+    }
+}
+
+/* Notification styles */
+.notification-counter {
+    position: absolute;
+    top: -5px;
+    right: -5px;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background-color: #e74c3c;
+    color: white;
+    font-size: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
