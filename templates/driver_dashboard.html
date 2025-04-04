@@ -1,540 +1,690 @@
-{% extends "base.html" %}
-
-{% block title %}Driver Dashboard{% endblock %}
-
-{% block head %}
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+{% extends "base.html" %} {% block title %}Driver Dashboard{% endblock %} {%
+block head %}
+<meta
+  name="viewport"
+  content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"
+/>
 
 <style>
-    .driver-header {
-        background-color: #3498db;
-        color: white;
-        padding: 15px;
-        border-radius: 5px;
-        margin-bottom: 20px;
-    }
-    
-    .driver-card {
-        border-radius: 10px;
-        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
-        margin-bottom: 20px;
-        transition: transform 0.2s ease;
-    }
-    
-    .driver-card:hover {
-        transform: translateY(-3px);
-    }
-    
-    .driver-card.active-route {
-        border-left: 4px solid #2ecc71;
-    }
-    
-    .driver-card.completed-route {
-        border-left: 4px solid #3498db;
-    }
-    
-    .driver-card.assigned-route {
-        border-left: 4px solid #f39c12;
-    }
-    
-    .driver-stats {
-        background: #f8f9fa;
-        border-radius: 10px;
-        padding: 15px;
-        margin-bottom: 20px;
-    }
-    
-    .route-badge {
-        font-size: 0.8rem;
-        padding: 5px 10px;
-    }
-    
-    .status-badge {
-        font-size: 0.75rem;
-        padding: 4px 8px;
-        border-radius: 10px;
-    }
-    
-    .assistance-alert-container {
-        animation: pulse-bg 2s infinite;
-    }
-    
-    @keyframes pulse-bg {
-        0% { background-color: #dc3545; }
-        50% { background-color: #e74c3c; }
-        100% { background-color: #dc3545; }
-    }
-    
-    @media (max-width: 768px) {
-        .container-fluid {
-            padding-left: 10px;
-            padding-right: 10px;
-        }
-    }
-</style>
-{% endblock %}
+  .driver-header {
+    background-color: #3498db;
+    color: white;
+    padding: 15px;
+    border-radius: 5px;
+    margin-bottom: 20px;
+  }
 
-{% block content %}
+  .driver-card {
+    border-radius: 10px;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+    margin-bottom: 20px;
+    transition: transform 0.2s ease;
+  }
+
+  .driver-card:hover {
+    transform: translateY(-3px);
+  }
+
+  .driver-card.active-route {
+    border-left: 4px solid #2ecc71;
+  }
+
+  .driver-card.completed-route {
+    border-left: 4px solid #3498db;
+  }
+
+  .driver-card.assigned-route {
+    border-left: 4px solid #f39c12;
+  }
+
+  .driver-stats {
+    background: #f8f9fa;
+    border-radius: 10px;
+    padding: 15px;
+    margin-bottom: 20px;
+  }
+
+  .route-badge {
+    font-size: 0.8rem;
+    padding: 5px 10px;
+  }
+
+  .status-badge {
+    font-size: 0.75rem;
+    padding: 4px 8px;
+    border-radius: 10px;
+  }
+
+  .assistance-alert-container {
+    animation: pulse-bg 2s infinite;
+  }
+
+  @keyframes pulse-bg {
+    0% {
+      background-color: #dc3545;
+    }
+    50% {
+      background-color: #e74c3c;
+    }
+    100% {
+      background-color: #dc3545;
+    }
+  }
+
+  @media (max-width: 768px) {
+    .container-fluid {
+      padding-left: 10px;
+      padding-right: 10px;
+    }
+  }
+</style>
+{% endblock %} {% block content %}
 <div class="container-fluid">
-    <div class="driver-header d-flex justify-content-between align-items-center">
-        <div>
-            <h1 class="fs-4 mb-0" id="driver-name">Driver Dashboard</h1>
-            <p class="mb-0 text-white-50" id="driver-vehicle">Loading driver info...</p>
-        </div>
-        <div>
-            <button class="btn btn-light btn-sm" id="logout-btn">
-                <i class="fas fa-sign-out-alt me-1"></i> Logout
-            </button>
-        </div>
+  <div class="driver-header d-flex justify-content-between align-items-center">
+    <div>
+      <h1 class="fs-4 mb-0" id="driver-name">Driver Dashboard</h1>
+      <p class="mb-0 text-white-50" id="driver-vehicle">
+        Loading driver info...
+      </p>
     </div>
-    
-    <div class="row">
-        <div class="col-md-8">
-            <div class="mb-4">
-                <h5>Your Routes</h5>
-                <div id="route-list" class="mt-3">
-                    <div class="text-center py-5">
-                        <div class="spinner-border text-primary" role="status">
-                            <span class="visually-hidden">Loading...</span>
-                        </div>
-                        <p class="mt-2">Loading your routes...</p>
-                    </div>
-                </div>
-            </div>
-        </div>
-        
-        <div class="col-md-4">
-            <div class="driver-stats">
-                <h5>Today's Summary</h5>
-                <div class="row text-center mt-3">
-                    <div class="col-4">
-                        <h3 id="pending-count">-</h3>
-                        <p class="text-muted mb-0">Pending</p>
-                    </div>
-                    <div class="col-4">
-                        <h3 id="completed-count">-</h3>
-                        <p class="text-muted mb-0">Completed</p>
-                    </div>
-                    <div class="col-4">
-                        <h3 id="total-count">-</h3>
-                        <p class="text-muted mb-0">Total</p>
-                    </div>
-                </div>
-            </div>
-            
-            <div class="card mb-4">
-                <div class="card-header">
-                    <h5 class="card-title mb-0">Current Status</h5>
-                </div>
-                <div class="card-body">
-                    <p id="current-status">Checking status...</p>
-                    <div id="active-route-info">
-                        <!-- Active route information will be displayed here -->
-                    </div>
-                </div>
-            </div>
-            
-            <div id="assistance-requests-panel" class="card mb-4 d-none">
-                <div class="card-header bg-warning text-dark">
-                    <h5 class="card-title mb-0">
-                        <i class="fas fa-exclamation-triangle me-1"></i> Assistance Requests
-                    </h5>
-                </div>
-                <div class="card-body">
-                    <div id="assistance-requests-count" class="mb-2"></div>
-                    <button class="btn btn-primary w-100" data-bs-toggle="modal" data-bs-target="#assistanceRequestsModal">
-                        <i class="fas fa-hands-helping me-1"></i> View Requests
-                    </button>
-                </div>
-            </div>
-        </div>
+    <div>
+      <button class="btn btn-light btn-sm" id="logout-btn">
+        <i class="fas fa-sign-out-alt me-1"></i> Logout
+      </button>
     </div>
+  </div>
+
+  <div class="row">
+    <div class="col-md-8">
+      <div class="mb-4">
+        <h5>Your Routes</h5>
+        <div id="route-list" class="mt-3">
+          <div class="text-center py-5">
+            <div class="spinner-border text-primary" role="status">
+              <span class="visually-hidden">Loading...</span>
+            </div>
+            <p class="mt-2">Loading your routes...</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-md-4">
+      <div class="driver-stats">
+        <h5>Today's Summary</h5>
+        <div class="row text-center mt-3">
+          <div class="col-4">
+            <h3 id="pending-count">-</h3>
+            <p class="text-muted mb-0">Pending</p>
+          </div>
+          <div class="col-4">
+            <h3 id="completed-count">-</h3>
+            <p class="text-muted mb-0">Completed</p>
+          </div>
+          <div class="col-4">
+            <h3 id="total-count">-</h3>
+            <p class="text-muted mb-0">Total</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="card mb-4">
+        <div class="card-header">
+          <h5 class="card-title mb-0">Current Status</h5>
+        </div>
+        <div class="card-body">
+          <p id="current-status">Checking status...</p>
+          <div id="active-route-info">
+            <!-- Active route information will be displayed here -->
+          </div>
+        </div>
+      </div>
+
+      <div id="assistance-requests-panel" class="card mb-4 d-none">
+        <div class="card-header bg-warning text-dark">
+          <h5 class="card-title mb-0">
+            <i class="fas fa-exclamation-triangle me-1"></i> Assistance Requests
+          </h5>
+        </div>
+        <div class="card-body">
+          <div id="assistance-requests-count" class="mb-2"></div>
+          <button
+            class="btn btn-primary w-100"
+            data-bs-toggle="modal"
+            data-bs-target="#assistanceRequestsModal"
+          >
+            <i class="fas fa-hands-helping me-1"></i> View Requests
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
 </div>
 
 <!-- Route Card Template (Hidden) -->
 <template id="route-card-template">
-    <div class="card driver-card mb-3" data-route-id="">
-        <div class="card-body">
-            <div class="d-flex justify-content-between align-items-center mb-2">
-                <h5 class="card-title mb-0 route-name"></h5>
-                <span class="badge status-badge"></span>
-            </div>
-            <div class="row mb-2">
-                <div class="col-auto">
-                    <small class="text-muted">
-                        <i class="fas fa-map-marker-alt me-1"></i> <span class="stop-count"></span> stops
-                    </small>
-                </div>
-                <div class="col-auto">
-                    <small class="text-muted">
-                        <i class="fas fa-route me-1"></i> <span class="route-distance"></span> km
-                    </small>
-                </div>
-                <div class="col-auto">
-                    <small class="text-muted">
-                        <i class="fas fa-clock me-1"></i> <span class="route-time"></span> hours
-                    </small>
-                </div>
-            </div>
-            <div class="text-end mt-2">
-                <button class="btn btn-sm btn-outline-primary view-route-btn">View Route</button>
-                <button class="btn btn-sm btn-success start-route-btn d-none">Start Route</button>
-            </div>
+  <div class="card driver-card mb-3" data-route-id="">
+    <div class="card-body">
+      <div class="d-flex justify-content-between align-items-center mb-2">
+        <h5 class="card-title mb-0 route-name"></h5>
+        <span class="badge status-badge"></span>
+      </div>
+      <div class="row mb-2">
+        <div class="col-auto">
+          <small class="text-muted">
+            <i class="fas fa-map-marker-alt me-1"></i>
+            <span class="stop-count"></span> stops
+          </small>
         </div>
+        <div class="col-auto">
+          <small class="text-muted">
+            <i class="fas fa-route me-1"></i>
+            <span class="route-distance"></span> km
+          </small>
+        </div>
+        <div class="col-auto">
+          <small class="text-muted">
+            <i class="fas fa-clock me-1"></i>
+            <span class="route-time"></span> hours
+          </small>
+        </div>
+      </div>
+      <div class="text-end mt-2">
+        <button class="btn btn-sm btn-outline-primary view-route-btn">
+          View Route
+        </button>
+        <button class="btn btn-sm btn-success start-route-btn d-none">
+          Start Route
+        </button>
+      </div>
     </div>
+  </div>
 </template>
-{% endblock %}
 
-{% block scripts %}
+<!-- Assistance Requests Modal -->
+<div
+  class="modal fade"
+  id="assistanceRequestsModal"
+  tabindex="-1"
+  aria-labelledby="assistanceRequestsModalLabel"
+  aria-hidden="true"
+>
+  <div class="modal-dialog modal-dialog-centered modal-lg">
+    <div class="modal-content">
+      <div class="modal-header bg-warning text-dark">
+        <h5 class="modal-title" id="assistanceRequestsModalLabel">
+          <i class="fas fa-exclamation-triangle me-2"></i>Drivers Needing Help
+        </h5>
+        <button
+          type="button"
+          class="btn-close"
+          data-bs-dismiss="modal"
+          aria-label="Close"
+        ></button>
+      </div>
+      <div class="modal-body">
+        <div id="assistance-requests-container">
+          <!-- Request cards will be loaded here -->
+          <div class="text-center py-3">
+            <div class="spinner-border text-warning" role="status">
+              <span class="visually-hidden">Loading...</span>
+            </div>
+            <p class="mt-2">Loading assistance requests...</p>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+          Close
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Assistance Request Card Template (Hidden) -->
+<template id="assistance-request-template">
+  <div class="card mb-3 assistance-card" data-transfer-id="">
+    <div
+      class="card-header bg-warning text-dark d-flex justify-content-between align-items-center"
+    >
+      <h6 class="mb-0">
+        <i class="fas fa-exclamation-triangle me-1"></i>
+        <span class="driver-name">Driver Name</span> needs assistance
+      </h6>
+      <span class="badge bg-danger stops-count">5 stops</span>
+    </div>
+    <div class="card-body">
+      <div class="mb-2">
+        <strong>Issue Type:</strong>
+        <span class="incident-type">Vehicle Breakdown</span>
+      </div>
+      <div class="mb-2">
+        <strong>Location:</strong>
+        <span class="incident-location">Address</span>
+      </div>
+      <div class="mb-2">
+        <strong>Distance:</strong>
+        <span class="incident-distance">2.5 km away</span>
+      </div>
+      <div class="mt-3 text-end">
+        <button class="btn btn-outline-secondary btn-sm view-on-map-btn">
+          <i class="fas fa-map-marker-alt me-1"></i>View on Map
+        </button>
+        <button class="btn btn-success btn-sm accept-assistance-btn">
+          <i class="fas fa-check me-1"></i>I Can Help
+        </button>
+      </div>
+    </div>
+  </div>
+</template>
+{% endblock %} {% block scripts %}
 <script>
-    // Global variables
-    let driverData = null;
-    let routes = [];
-    let activeRouteId = null;
-    
-    // Helper functions
-    function formatTime(hours) {
-        const h = Math.floor(hours);
-        const m = Math.round((hours - h) * 60);
-        return `${h}h ${m}m`;
+  // Global variables
+  let driverData = null;
+  let routes = [];
+  let activeRouteId = null;
+
+  // Helper functions
+  function formatTime(hours) {
+    const h = Math.floor(hours);
+    const m = Math.round((hours - h) * 60);
+    return `${h}h ${m}m`;
+  }
+
+  function getStatusClass(status) {
+    switch (status) {
+      case "assigned":
+        return "assigned-route";
+      case "in_progress":
+        return "active-route";
+      case "completed":
+        return "completed-route";
+      default:
+        return "";
     }
-    
-    function getStatusClass(status) {
-        switch(status) {
-            case 'assigned': return 'assigned-route';
-            case 'in_progress': return 'active-route';
-            case 'completed': return 'completed-route';
-            default: return '';
+  }
+
+  function getStatusBadgeClass(status) {
+    switch (status) {
+      case "assigned":
+        return "bg-warning";
+      case "in_progress":
+        return "bg-success";
+      case "completed":
+        return "bg-primary";
+      case "cancelled":
+        return "bg-danger";
+      default:
+        return "bg-secondary";
+    }
+  }
+
+  function getStatusText(status) {
+    switch (status) {
+      case "assigned":
+        return "Assigned";
+      case "in_progress":
+        return "In Progress";
+      case "completed":
+        return "Completed";
+      case "cancelled":
+        return "Cancelled";
+      default:
+        return "Unknown";
+    }
+  }
+
+  // Function to load driver profile
+  function loadDriverProfile() {
+    fetch("/driver/profile", {
+      headers: {
+        Authorization: "Bearer " + getToken(),
+      },
+    })
+      .then((response) => {
+        if (!response.ok) {
+          // If unauthorized, redirect to login
+          if (response.status === 401) {
+            window.location.href = "/driver/login";
+            return;
+          }
+          throw new Error("Failed to load profile");
         }
-    }
-    
-    function getStatusBadgeClass(status) {
-        switch(status) {
-            case 'assigned': return 'bg-warning';
-            case 'in_progress': return 'bg-success';
-            case 'completed': return 'bg-primary';
-            case 'cancelled': return 'bg-danger';
-            default: return 'bg-secondary';
+        return response.json();
+      })
+      .then((data) => {
+        driverData = data;
+
+        // Update driver info
+        document.getElementById(
+          "driver-name"
+        ).textContent = `${data.driver.first_name} ${data.driver.last_name}`;
+
+        // Update vehicle info if available
+        if (data.vehicle) {
+          document.getElementById(
+            "driver-vehicle"
+          ).textContent = `${data.vehicle.name} (${data.vehicle.license_plate})`;
+        } else {
+          document.getElementById("driver-vehicle").textContent =
+            "No vehicle assigned";
         }
-    }
-    
-    function getStatusText(status) {
-        switch(status) {
-            case 'assigned': return 'Assigned';
-            case 'in_progress': return 'In Progress';
-            case 'completed': return 'Completed';
-            case 'cancelled': return 'Cancelled';
-            default: return 'Unknown';
+
+        // Load routes after profile is loaded
+        loadDriverRoutes();
+      })
+      .catch((error) => {
+        console.error("Error loading profile:", error);
+        showToast("Failed to load driver profile", "danger");
+      });
+  }
+
+  // Function to load driver routes
+  function loadDriverRoutes() {
+    fetch("/driver/routes", {
+      headers: {
+        Authorization: "Bearer " + getToken(),
+      },
+    })
+      .then((response) => {
+        if (!response.ok) {
+          throw new Error("Failed to load routes");
         }
-    }
-    
-    // Function to load driver profile
-    function loadDriverProfile() {
-        fetch('/driver/profile', {
-            headers: {
-                'Authorization': 'Bearer ' + getToken()
-            }
-        })
-        .then(response => {
-            if (!response.ok) {
-                // If unauthorized, redirect to login
-                if (response.status === 401) {
-                    window.location.href = '/driver/login';
-                    return;
-                }
-                throw new Error('Failed to load profile');
-            }
-            return response.json();
-        })
-        .then(data => {
-            driverData = data;
-            
-            // Update driver info
-            document.getElementById('driver-name').textContent = `${data.driver.first_name} ${data.driver.last_name}`;
-            
-            // Update vehicle info if available
-            if (data.vehicle) {
-                document.getElementById('driver-vehicle').textContent = `${data.vehicle.name} (${data.vehicle.license_plate})`;
-            } else {
-                document.getElementById('driver-vehicle').textContent = 'No vehicle assigned';
-            }
-            
-            // Load routes after profile is loaded
-            loadDriverRoutes();
-        })
-        .catch(error => {
-            console.error('Error loading profile:', error);
-            showToast('Failed to load driver profile', 'danger');
-        });
-    }
-    
-    // Function to load driver routes
-    function loadDriverRoutes() {
-        fetch('/driver/routes', {
-            headers: {
-                'Authorization': 'Bearer ' + getToken()
-            }
-        })
-        .then(response => {
-            if (!response.ok) {
-                throw new Error('Failed to load routes');
-            }
-            return response.json();
-        })
-        .then(data => {
-            routes = data;
-            renderRoutes();
-            updateStats();
-        })
-        .catch(error => {
-            console.error('Error loading routes:', error);
-            document.getElementById('route-list').innerHTML = `
+        return response.json();
+      })
+      .then((data) => {
+        routes = data;
+        renderRoutes();
+        updateStats();
+      })
+      .catch((error) => {
+        console.error("Error loading routes:", error);
+        document.getElementById("route-list").innerHTML = `
                 <div class="alert alert-danger">
                     Failed to load routes. Please try refreshing the page.
                 </div>
             `;
-        });
-    }
-    
-    // Function to render routes
-    function renderRoutes() {
-        const routeList = document.getElementById('route-list');
-        routeList.innerHTML = '';
-        
-        if (routes.length === 0) {
-            routeList.innerHTML = `
+      });
+  }
+
+  // Function to render routes
+  function renderRoutes() {
+    const routeList = document.getElementById("route-list");
+    routeList.innerHTML = "";
+
+    if (routes.length === 0) {
+      routeList.innerHTML = `
                 <div class="text-center py-4">
                     <i class="fas fa-route fa-3x text-muted mb-3"></i>
                     <p>No routes assigned to you yet.</p>
                 </div>
             `;
-            return;
-        }
-        
-        // Find active route if any
-        const activeRoute = routes.find(r => r.driver_route.status === 'in_progress');
-        if (activeRoute) {
-            activeRouteId = activeRoute.driver_route.id;
-        }
-        
-        // Sort routes by status and date (active first, then assigned, then completed)
-        routes.sort((a, b) => {
-            // Active routes first
-            if (a.driver_route.status === 'in_progress' && b.driver_route.status !== 'in_progress') return -1;
-            if (b.driver_route.status === 'in_progress' && a.driver_route.status !== 'in_progress') return 1;
-            
-            // Then assigned routes
-            if (a.driver_route.status === 'assigned' && b.driver_route.status !== 'assigned') return -1;
-            if (b.driver_route.status === 'assigned' && a.driver_route.status !== 'assigned') return 1;
-            
-            // Sort by date (newest first) within the same status
-            const aDate = new Date(a.driver_route.assigned_at);
-            const bDate = new Date(b.driver_route.assigned_at);
-            return bDate - aDate;
-        });
-        
-        // Create route cards
-        routes.forEach(route => {
-            const template = document.getElementById('route-card-template');
-            const card = document.importNode(template.content, true).querySelector('.card');
-            
-            // Set data attributes
-            card.dataset.routeId = route.driver_route.id;
-            card.classList.add(getStatusClass(route.driver_route.status));
-            
-            // Set card content
-            card.querySelector('.route-name').textContent = route.route_name;
-            card.querySelector('.status-badge').textContent = getStatusText(route.driver_route.status);
-            card.querySelector('.status-badge').classList.add(getStatusBadgeClass(route.driver_route.status));
-            card.querySelector('.stop-count').textContent = route.stops_count;
-            card.querySelector('.route-distance').textContent = route.total_distance.toFixed(1);
-            card.querySelector('.route-time').textContent = formatTime(route.total_time);
-            
-            // Handle buttons
-            const viewBtn = card.querySelector('.view-route-btn');
-            const startBtn = card.querySelector('.start-route-btn');
-            
-            viewBtn.addEventListener('click', () => {
-                window.location.href = `/driver/route/${route.driver_route.id}`;
-            });
-            
-            // Show start button for assigned routes
-            if (route.driver_route.status === 'assigned') {
-                startBtn.classList.remove('d-none');
-                startBtn.addEventListener('click', () => startRoute(route.driver_route.id));
-            }
-            
-            routeList.appendChild(card);
-        });
-        
-        // Update current status section
-        updateCurrentStatus();
+      return;
     }
-    
-    // Function to update stats
-    function updateStats() {
-        // Count routes by status
-        const pending = routes.filter(r => r.driver_route.status === 'assigned').length;
-        const completed = routes.filter(r => r.driver_route.status === 'completed').length;
-        const total = routes.length;
-        
-        // Update UI
-        document.getElementById('pending-count').textContent = pending;
-        document.getElementById('completed-count').textContent = completed;
-        document.getElementById('total-count').textContent = total;
+
+    // Find active route if any
+    const activeRoute = routes.find(
+      (r) => r.driver_route.status === "in_progress"
+    );
+    if (activeRoute) {
+      activeRouteId = activeRoute.driver_route.id;
     }
-    
-    // Function to update current status
-    function updateCurrentStatus() {
-        const statusElement = document.getElementById('current-status');
-        const activeRouteInfo = document.getElementById('active-route-info');
-        
-        // Find active route
-        const activeRoute = routes.find(r => r.driver_route.id === activeRouteId);
-        
-        if (activeRoute) {
-            statusElement.innerHTML = `
+
+    // Sort routes by status and date (active first, then assigned, then completed)
+    routes.sort((a, b) => {
+      // Active routes first
+      if (
+        a.driver_route.status === "in_progress" &&
+        b.driver_route.status !== "in_progress"
+      )
+        return -1;
+      if (
+        b.driver_route.status === "in_progress" &&
+        a.driver_route.status !== "in_progress"
+      )
+        return 1;
+
+      // Then assigned routes
+      if (
+        a.driver_route.status === "assigned" &&
+        b.driver_route.status !== "assigned"
+      )
+        return -1;
+      if (
+        b.driver_route.status === "assigned" &&
+        a.driver_route.status !== "assigned"
+      )
+        return 1;
+
+      // Sort by date (newest first) within the same status
+      const aDate = new Date(a.driver_route.assigned_at);
+      const bDate = new Date(b.driver_route.assigned_at);
+      return bDate - aDate;
+    });
+
+    // Create route cards
+    routes.forEach((route) => {
+      const template = document.getElementById("route-card-template");
+      const card = document
+        .importNode(template.content, true)
+        .querySelector(".card");
+
+      // Set data attributes
+      card.dataset.routeId = route.driver_route.id;
+      card.classList.add(getStatusClass(route.driver_route.status));
+
+      // Set card content
+      card.querySelector(".route-name").textContent = route.route_name;
+      card.querySelector(".status-badge").textContent = getStatusText(
+        route.driver_route.status
+      );
+      card
+        .querySelector(".status-badge")
+        .classList.add(getStatusBadgeClass(route.driver_route.status));
+      card.querySelector(".stop-count").textContent = route.stops_count;
+      card.querySelector(".route-distance").textContent =
+        route.total_distance.toFixed(1);
+      card.querySelector(".route-time").textContent = formatTime(
+        route.total_time
+      );
+
+      // Handle buttons
+      const viewBtn = card.querySelector(".view-route-btn");
+      const startBtn = card.querySelector(".start-route-btn");
+
+      viewBtn.addEventListener("click", () => {
+        window.location.href = `/driver/route/${route.driver_route.id}`;
+      });
+
+      // Show start button for assigned routes
+      if (route.driver_route.status === "assigned") {
+        startBtn.classList.remove("d-none");
+        startBtn.addEventListener("click", () =>
+          startRoute(route.driver_route.id)
+        );
+      }
+
+      routeList.appendChild(card);
+    });
+
+    // Update current status section
+    updateCurrentStatus();
+  }
+
+  // Function to update stats
+  function updateStats() {
+    // Count routes by status
+    const pending = routes.filter(
+      (r) => r.driver_route.status === "assigned"
+    ).length;
+    const completed = routes.filter(
+      (r) => r.driver_route.status === "completed"
+    ).length;
+    const total = routes.length;
+
+    // Update UI
+    document.getElementById("pending-count").textContent = pending;
+    document.getElementById("completed-count").textContent = completed;
+    document.getElementById("total-count").textContent = total;
+  }
+
+  // Function to update current status
+  function updateCurrentStatus() {
+    const statusElement = document.getElementById("current-status");
+    const activeRouteInfo = document.getElementById("active-route-info");
+
+    // Find active route
+    const activeRoute = routes.find((r) => r.driver_route.id === activeRouteId);
+
+    if (activeRoute) {
+      statusElement.innerHTML = `
                 <span class="badge bg-success">Active Route</span>
                 <strong class="ms-2">${activeRoute.route_name}</strong>
             `;
-            
-            // Show active route info
-            activeRouteInfo.innerHTML = `
+
+      // Show active route info
+      activeRouteInfo.innerHTML = `
                 <div class="mt-3">
                     <div class="progress mb-2" style="height: 10px;">
                         <div class="progress-bar bg-success" role="progressbar" style="width: 0%"></div>
                     </div>
                     <div class="d-flex justify-content-between small text-muted">
                         <span>0/${activeRoute.stops_count} stops</span>
-                        <span>${activeRoute.total_distance.toFixed(1)} km total</span>
+                        <span>${activeRoute.total_distance.toFixed(
+                          1
+                        )} km total</span>
                     </div>
                     <div class="mt-3 text-center">
-                        <a href="/driver/route/${activeRoute.driver_route.id}" class="btn btn-primary btn-sm">
+                        <a href="/driver/route/${
+                          activeRoute.driver_route.id
+                        }" class="btn btn-primary btn-sm">
                             <i class="fas fa-location-arrow me-1"></i> Continue Route
                         </a>
                     </div>
                 </div>
             `;
-            
-            // TODO: Fetch detailed progress for the active route and update progress bar
-        } else if (routes.some(r => r.driver_route.status === 'assigned')) {
-            statusElement.innerHTML = `
+
+      // TODO: Fetch detailed progress for the active route and update progress bar
+    } else if (routes.some((r) => r.driver_route.status === "assigned")) {
+      statusElement.innerHTML = `
                 <span class="badge bg-warning">Ready</span>
                 <span class="ms-2">You have assigned routes to start</span>
             `;
-            activeRouteInfo.innerHTML = '';
-        } else {
-            statusElement.innerHTML = `
+      activeRouteInfo.innerHTML = "";
+    } else {
+      statusElement.innerHTML = `
                 <span class="badge bg-secondary">Idle</span>
                 <span class="ms-2">No active routes</span>
             `;
-            activeRouteInfo.innerHTML = '';
+      activeRouteInfo.innerHTML = "";
+    }
+  }
+
+  // Function to start a route
+  function startRoute(routeId) {
+    if (!confirm("Are you sure you want to start this route now?")) {
+      return;
+    }
+
+    fetch(`/driver/routes/${routeId}/status`, {
+      method: "PUT",
+      headers: {
+        Authorization: "Bearer " + getToken(),
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        status: "in_progress",
+      }),
+    })
+      .then((response) => {
+        if (!response.ok) {
+          throw new Error("Failed to start route");
         }
-    }
-    
-    // Function to start a route
-    function startRoute(routeId) {
-        if (!confirm('Are you sure you want to start this route now?')) {
-            return;
+        return response.json();
+      })
+      .then((data) => {
+        // Set active route
+        activeRouteId = routeId;
+
+        // Update route status in local data
+        const route = routes.find((r) => r.driver_route.id === routeId);
+        if (route) {
+          route.driver_route.status = "in_progress";
+          route.driver_route.started_at = data.driver_route.started_at;
         }
-        
-        fetch(`/driver/routes/${routeId}/status`, {
-            method: 'PUT',
-            headers: {
-                'Authorization': 'Bearer ' + getToken(),
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-                status: 'in_progress'
-            })
-        })
-        .then(response => {
-            if (!response.ok) {
-                throw new Error('Failed to start route');
-            }
-            return response.json();
-        })
-        .then(data => {
-            // Set active route
-            activeRouteId = routeId;
-            
-            // Update route status in local data
-            const route = routes.find(r => r.driver_route.id === routeId);
-            if (route) {
-                route.driver_route.status = 'in_progress';
-                route.driver_route.started_at = data.driver_route.started_at;
-            }
-            
-            // Re-render routes
-            renderRoutes();
-            
-            // Show success message
-            showToast('Route started successfully', 'success');
-            
-            // Redirect to route details page
-            setTimeout(() => {
-                window.location.href = `/driver/route/${routeId}`;
-            }, 1000);
-        })
-        .catch(error => {
-            console.error('Error starting route:', error);
-            showToast('Failed to start route', 'danger');
-        });
+
+        // Re-render routes
+        renderRoutes();
+
+        // Show success message
+        showToast("Route started successfully", "success");
+
+        // Redirect to route details page
+        setTimeout(() => {
+          window.location.href = `/driver/route/${routeId}`;
+        }, 1000);
+      })
+      .catch((error) => {
+        console.error("Error starting route:", error);
+        showToast("Failed to start route", "danger");
+      });
+  }
+
+  // Function to handle logout
+  function handleLogout() {
+    fetch("/driver/logout", {
+      method: "POST",
+      headers: {
+        Authorization: "Bearer " + getToken(),
+      },
+    })
+      .then(() => {
+        // Clear token from localStorage
+        localStorage.removeItem("driver_token");
+        sessionStorage.removeItem("driver_token");
+
+        // Redirect to login page
+        window.location.href = "/driver/login";
+      })
+      .catch((error) => {
+        console.error("Error logging out:", error);
+
+        // Force logout anyway
+        localStorage.removeItem("driver_token");
+        sessionStorage.removeItem("driver_token");
+        window.location.href = "/driver/login";
+      });
+  }
+
+  // Function to get token from localStorage or cookie
+  function getToken() {
+    return localStorage.getItem("driver_token") || "";
+  }
+
+  // Show toast notification
+  function showToast(message, type = "info") {
+    // Create toast container if it doesn't exist
+    let toastContainer = document.getElementById("toast-container");
+    if (!toastContainer) {
+      toastContainer = document.createElement("div");
+      toastContainer.id = "toast-container";
+      toastContainer.className =
+        "toast-container position-fixed bottom-0 end-0 p-3";
+      document.body.appendChild(toastContainer);
     }
-    
-    // Function to handle logout
-    function handleLogout() {
-        fetch('/driver/logout', {
-            method: 'POST',
-            headers: {
-                'Authorization': 'Bearer ' + getToken()
-            }
-        })
-        .then(() => {
-            // Clear token from localStorage
-            localStorage.removeItem('driver_token');
-            sessionStorage.removeItem('driver_token');
-            
-            // Redirect to login page
-            window.location.href = '/driver/login';
-        })
-        .catch(error => {
-            console.error('Error logging out:', error);
-            
-            // Force logout anyway
-            localStorage.removeItem('driver_token');
-            sessionStorage.removeItem('driver_token');
-            window.location.href = '/driver/login';
-        });
-    }
-    
-    // Function to get token from localStorage or cookie
-    function getToken() {
-        return localStorage.getItem('driver_token') || '';
-    }
-    
-    // Show toast notification
-    function showToast(message, type = 'info') {
-        // Create toast container if it doesn't exist
-        let toastContainer = document.getElementById('toast-container');
-        if (!toastContainer) {
-            toastContainer = document.createElement('div');
-            toastContainer.id = 'toast-container';
-            toastContainer.className = 'toast-container position-fixed bottom-0 end-0 p-3';
-            document.body.appendChild(toastContainer);
-        }
-        
-        // Create toast
-        const toastId = 'toast-' + Date.now();
-        const toast = document.createElement('div');
-        toast.className = `toast align-items-center text-white bg-${type} border-0`;
-        toast.id = toastId;
-        toast.setAttribute('role', 'alert');
-        toast.setAttribute('aria-live', 'assertive');
-        toast.setAttribute('aria-atomic', 'true');
-        
-        // Toast content
-        toast.innerHTML = `
+
+    // Create toast
+    const toastId = "toast-" + Date.now();
+    const toast = document.createElement("div");
+    toast.className = `toast align-items-center text-white bg-${type} border-0`;
+    toast.id = toastId;
+    toast.setAttribute("role", "alert");
+    toast.setAttribute("aria-live", "assertive");
+    toast.setAttribute("aria-atomic", "true");
+
+    // Toast content
+    toast.innerHTML = `
             <div class="d-flex">
                 <div class="toast-body">
                     ${message}
@@ -542,156 +692,470 @@
                 <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
             </div>
         `;
-        
-        // Add to container
-        toastContainer.appendChild(toast);
-        
-        // Initialize and show toast
-        const bsToast = new bootstrap.Toast(toast, {
-            autohide: true,
-            delay: 3000
-        });
-        bsToast.show();
-    }
-    
-    // Add function to check for assistance requests
-    function checkAssistanceRequests() {
-        fetch('/api/driver/assistance-requests', {
-            headers: {
-                'Authorization': 'Bearer ' + getToken()
-            }
-        })
-        .then(response => {
-            if (!response.ok) {
-                throw new Error('Failed to check assistance requests');
-            }
-            return response.json();
-        })
-        .then(data => {
-            if (data && data.length > 0) {
-                // Remove existing alert if present
-                const existingAlert = document.querySelector('.assistance-alert-container');
-                if (existingAlert) {
-                    existingAlert.remove();
-                }
-                
-                // Show a prominent alert at the top of the dashboard
-                const alertContainer = document.createElement('div');
-                alertContainer.className = 'assistance-alert-container alert alert-danger mb-4';
-                alertContainer.innerHTML = `
-                    <div class="d-flex align-items-center">
-                        <div class="flex-shrink-0 me-3">
-                            <i class="fas fa-exclamation-triangle fa-2x"></i>
-                        </div>
-                        <div class="flex-grow-1">
-                            <h5 class="alert-heading mb-1">Drivers Need Assistance!</h5>
-                            <p class="mb-0">${data.length} drivers nearby need your help with their routes.</p>
-                        </div>
-                        <div class="flex-shrink-0">
-                            <button class="btn btn-light" data-bs-toggle="modal" data-bs-target="#assistanceRequestsModal">
-                                View Requests
-                            </button>
-                        </div>
+
+    // Add to container
+    toastContainer.appendChild(toast);
+
+    // Initialize and show toast
+    const bsToast = new bootstrap.Toast(toast, {
+      autohide: true,
+      delay: 3000,
+    });
+    bsToast.show();
+  }
+
+  // Function to check for assistance requests
+
+  function checkAssistanceRequests() {
+    fetch("/api/driver/assistance-requests", {
+      headers: {
+        Authorization: "Bearer " + getToken(),
+      },
+    })
+      .then((response) => {
+        if (!response.ok) {
+          throw new Error("Failed to check assistance requests");
+        }
+        return response.json();
+      })
+      .then((data) => {
+        console.log("Assistance request data:", data); // Debug: Log the data structure
+
+        if (data && data.length > 0) {
+          // Remove existing alert if present
+          const existingAlert = document.querySelector(
+            ".assistance-alert-container"
+          );
+          if (existingAlert) {
+            existingAlert.remove();
+          }
+
+          // Show a prominent alert at the top of the dashboard
+          const alertContainer = document.createElement("div");
+          alertContainer.className =
+            "assistance-alert-container alert alert-danger mb-4";
+          alertContainer.innerHTML = `
+                <div class="d-flex align-items-center">
+                    <div class="flex-shrink-0 me-3">
+                        <i class="fas fa-exclamation-triangle fa-2x"></i>
+                    </div>
+                    <div class="flex-grow-1">
+                        <h5 class="alert-heading mb-1">Drivers Need Assistance!</h5>
+                        <p class="mb-0">${data.length} drivers nearby need your help with their routes.</p>
+                    </div>
+                    <div class="flex-shrink-0">
+                        <button class="btn btn-light" data-bs-toggle="modal" data-bs-target="#assistanceRequestsModal">
+                            View Requests
+                        </button>
+                    </div>
+                </div>
+            `;
+
+          // Insert at the top of the content
+          const contentContainer = document.querySelector(".container-fluid");
+          contentContainer.insertBefore(
+            alertContainer,
+            contentContainer.firstChild
+          );
+
+          // Update sidebar assistance panel
+          const assistancePanel = document.getElementById(
+            "assistance-requests-panel"
+          );
+          assistancePanel.classList.remove("d-none");
+          document.getElementById("assistance-requests-count").textContent = `${
+            data.length
+          } driver${data.length > 1 ? "s" : ""} need${
+            data.length === 1 ? "s" : ""
+          } assistance`;
+
+          // Update the modal content
+          updateAssistanceRequestsModal(data);
+        } else {
+          // Hide the panel if no requests
+          document
+            .getElementById("assistance-requests-panel")
+            .classList.add("d-none");
+
+          // Remove alert if it exists
+          const existingAlert = document.querySelector(
+            ".assistance-alert-container"
+          );
+          if (existingAlert) {
+            existingAlert.remove();
+          }
+
+          // Update the modal content if it's open
+          const requestsContainer = document.getElementById(
+            "assistance-requests-container"
+          );
+          if (requestsContainer) {
+            requestsContainer.innerHTML = `
+                    <div class="text-center py-4">
+                        <i class="fas fa-check-circle fa-3x text-success mb-3"></i>
+                        <p>No assistance requests at this time.</p>
                     </div>
                 `;
-                
-                // Insert at the top of the content
-                const contentContainer = document.querySelector('.container-fluid');
-                contentContainer.insertBefore(alertContainer, contentContainer.firstChild);
-                
-                // Update sidebar assistance panel
-                const assistancePanel = document.getElementById('assistance-requests-panel');
-                assistancePanel.classList.remove('d-none');
-                document.getElementById('assistance-requests-count').textContent = 
-                    `${data.length} driver${data.length > 1 ? 's' : ''} need${data.length === 1 ? 's' : ''} assistance`;
-            } else {
-                // Hide the panel if no requests
-                document.getElementById('assistance-requests-panel').classList.add('d-none');
-                
-                // Remove alert if it exists
-                const existingAlert = document.querySelector('.assistance-alert-container');
-                if (existingAlert) {
-                    existingAlert.remove();
-                }
-            }
-        })
-        .catch(error => {
-            console.error('Error checking assistance requests:', error);
-        });
-    }
-    
-    // Function to accept assistance request
-    function acceptAssistanceRequest(transferId) {
-        if (!confirm('Are you sure you want to help with this route? This will add additional stops to your current route.')) {
-            return;
+          }
         }
-        
-        // Get button and disable it
-        const button = document.querySelector(`button[data-transfer-id="${transferId}"]`);
-        if (button) {
-            button.disabled = true;
-            button.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Accepting...';
+      })
+      .catch((error) => {
+        console.error("Error checking assistance requests:", error);
+        // Show error in the modal if it's open
+        const requestsContainer = document.getElementById(
+          "assistance-requests-container"
+        );
+        if (requestsContainer) {
+          requestsContainer.innerHTML = `
+                <div class="alert alert-danger">
+                    <i class="fas fa-exclamation-circle me-2"></i>
+                    Failed to load assistance requests. Please try again.
+                </div>
+            `;
         }
-        
-        fetch(`/api/driver/transfers/${transferId}/accept`, {
-            method: 'POST',
-            headers: {
-                'Authorization': 'Bearer ' + getToken()
-            }
-        })
-        .then(response => {
-            if (!response.ok) {
-                throw new Error('Failed to accept transfer');
-            }
-            return response.json();
-        })
-        .then(data => {
-            // Hide modal
-            const modal = bootstrap.Modal.getInstance(document.getElementById('assistanceRequestsModal'));
-            if (modal) modal.hide();
-            
-            // Show success message
-            showToast(`You've accepted ${data.transfer.stop_count} additional stops. Refreshing route data...`, 'success');
-            
-            // Reload route data to get new stops
-            setTimeout(() => {
-                loadDriverRoutes();
-            }, 1500);
-        })
-        .catch(error => {
-            console.error('Error accepting assistance request:', error);
-            showToast('Failed to accept assistance request', 'danger');
-            
-            // Re-enable button
-            if (button) {
-                button.disabled = false;
-                button.innerHTML = '<i class="fas fa-check me-1"></i>I Can Help';
-            }
-        });
-    }
-    
-    // Initialize when DOM is loaded
-    document.addEventListener('DOMContentLoaded', function() {
-        // Setup logout button
-        document.getElementById('logout-btn').addEventListener('click', handleLogout);
-        
-        // Check if user is logged in
-        if (!getToken()) {
-            window.location.href = '/driver/login';
-            return;
+      });
+  }
+
+  //update assistance request
+  // Replace your current updateAssistanceRequestsModal function with this fixed version
+  // New function to update the assistance requests modal with better error handling
+  function updateAssistanceRequestsModal(requests) {
+    const requestsContainer = document.getElementById(
+      "assistance-requests-container"
+    );
+    if (!requestsContainer) return;
+
+    requestsContainer.innerHTML = "";
+
+    // Add cards for each request
+    requests.forEach((request) => {
+      try {
+        const template = document.getElementById("assistance-request-template");
+        if (!template) {
+          throw new Error("Template not found: assistance-request-template");
         }
-        
-        // Load driver profile and routes
-        loadDriverProfile();
-        
-        // Check for assistance requests
-        checkAssistanceRequests();
-        
-        // Refresh data periodically
-        setInterval(() => {
-            loadDriverRoutes();
-            checkAssistanceRequests();
-        }, 60000); // Every minute
+
+        const card = document
+          .importNode(template.content, true)
+          .querySelector(".card");
+
+        // Set data attributes
+        card.dataset.transferId = request.id || "";
+
+        // Set content
+        // Driver name
+        const driverNameEl = card.querySelector(".driver-name");
+        if (driverNameEl) {
+          driverNameEl.textContent =
+            request.original_driver?.name || "Unknown Driver";
+        }
+
+        // Stops count
+        const stopsCountEl = card.querySelector(".stops-count");
+        if (stopsCountEl) {
+          stopsCountEl.textContent = `${request.stop_count || 0} stops`;
+        }
+
+        // Incident type - using vehicle type since we don't have incident type
+        const incidentTypeEl = card.querySelector(".incident-type");
+        if (incidentTypeEl) {
+          const vehicleType = request.vehicle_requirements?.type || "Unknown";
+          incidentTypeEl.textContent = vehicleType;
+        }
+
+        // Location - This was the problem!
+        const locationEl = card.querySelector(".incident-location");
+        if (locationEl) {
+          // Use a generic message since we don't have location data
+          locationEl.textContent = "Location information not available";
+        }
+
+        // Distance
+        const distanceEl = card.querySelector(".incident-distance");
+        if (distanceEl) {
+          if (request.distance_km !== undefined) {
+            distanceEl.textContent = `${request.distance_km.toFixed(
+              1
+            )} km away`;
+          } else {
+            distanceEl.textContent = "Distance unknown";
+          }
+        }
+
+        // Remove the view on map button since we don't have location data
+        const viewMapBtn = card.querySelector(".view-on-map-btn");
+        if (viewMapBtn) {
+          viewMapBtn.remove();
+        }
+
+        // Accept assistance button
+        const acceptBtn = card.querySelector(".accept-assistance-btn");
+        if (acceptBtn) {
+          acceptBtn.addEventListener("click", function () {
+            acceptAssistanceRequest(request.id);
+          });
+        }
+
+        requestsContainer.appendChild(card);
+      } catch (err) {
+        console.error("Error processing request:", err, request);
+        // Add a fallback card for this request
+        requestsContainer.innerHTML += `
+        <div class="card mb-3 bg-light">
+          <div class="card-body">
+            <h6>Request from ${
+              request.original_driver?.name || "Unknown Driver"
+            }</h6>
+            <p>This driver needs assistance with ${
+              request.stop_count || "some"
+            } stops.</p>
+            <p>Vehicle type: ${
+              request.vehicle_requirements?.type || "Not specified"
+            }</p>
+            <button class="btn btn-success btn-sm" data-transfer-id="${
+              request.id || ""
+            }" onclick="acceptAssistanceRequest(this.getAttribute('data-transfer-id'))">
+              <i class="fas fa-check me-1"></i>I Can Help
+            </button>
+          </div>
+        </div>
+      `;
+      }
     });
+  }
+
+  // Function to accept assistance request
+
+
+  // Add this to driver_dashboard.html before the closing script tag
+
+// Function to handle active incidents on dashboard
+function handleActiveIncidents(incidents) {
+  if (!incidents || incidents.length === 0) {
+    return;
+  }
+  
+  // Check the first active incident
+  const incident = incidents[0];
+  
+  // Check if this incident has been acknowledged
+  const incidentAcknowledged = localStorage.getItem(`incident_${incident.id}_acknowledged`) === 'true';
+  
+  // Only show a notification if the incident hasn't been acknowledged yet
+  if (!incidentAcknowledged && (incident.status === 'assistance_assigned' || incident.help_status === 'accepted')) {
+    // Create a banner notification at the top of the dashboard
+    const container = document.querySelector('.container-fluid');
+    
+    // Check if the notification already exists
+    if (!document.querySelector('.incident-notification')) {
+      const notification = document.createElement('div');
+      notification.className = 'alert alert-success mb-4 incident-notification';
+      notification.innerHTML = `
+        <div class="d-flex align-items-center">
+          <div class="me-3">
+            <i class="fas fa-check-circle fa-2x"></i>
+          </div>
+          <div class="flex-grow-1">
+            <h5 class="alert-heading mb-1">Help Is On The Way!</h5>
+            <p class="mb-0">
+              ${incident.helper_info?.driver_name || 'Another driver'} has been assigned to help with your remaining stops.
+            </p>
+          </div>
+          <div>
+            <button class="btn btn-sm btn-outline-success" id="acknowledgeIncidentBtn">
+              <i class="fas fa-check me-1"></i>Acknowledge
+            </button>
+          </div>
+        </div>
+      `;
+      
+      // Insert at the top
+      container.insertBefore(notification, container.firstChild);
+      
+      // Add event listener to acknowledge button
+      document.getElementById('acknowledgeIncidentBtn').addEventListener('click', function() {
+        // Mark as acknowledged
+        localStorage.setItem(`incident_${incident.id}_acknowledged`, 'true');
+        
+        // Remove the notification
+        notification.remove();
+      });
+    }
+    
+    // Also update any routes in the list that might be affected
+    updateRouteCards(incident);
+  }
+}
+
+// Function to update route cards for transferred routes
+function updateRouteCards(incident) {
+  // Find the original route that was transferred
+  const originalRouteId = incident.driver_route_id;
+  
+  // Update the route card if it exists
+  const routeCards = document.querySelectorAll('.driver-card');
+  routeCards.forEach(card => {
+    const routeId = card.dataset.routeId;
+    if (routeId == originalRouteId) {
+      // Find the status badge
+      const statusBadge = card.querySelector('.status-badge');
+      if (statusBadge) {
+        statusBadge.textContent = 'Transferred';
+        statusBadge.classList.remove('bg-warning', 'bg-success', 'bg-primary', 'bg-danger');
+        statusBadge.classList.add('bg-info');
+      }
+      
+      // Add a note to the card
+      const routeInfo = card.querySelector('.card-text') || card.querySelector('.small');
+      if (routeInfo) {
+        const transferNote = document.createElement('p');
+        transferNote.className = 'card-text small text-success mt-1';
+        transferNote.innerHTML = `<i class="fas fa-exchange-alt me-1"></i> Remaining stops transferred to ${incident.helper_info?.driver_name || 'another driver'}`;
+        routeInfo.parentNode.insertBefore(transferNote, routeInfo.nextSibling);
+      }
+    }
+  });
+}
+
+// Check for active incidents when dashboard loads
+document.addEventListener('DOMContentLoaded', function() {
+  // Wait for driver profile to be loaded first
+  const checkIncidentsInterval = setInterval(() => {
+    if (driverData) {
+      clearInterval(checkIncidentsInterval);
+      
+      // Check for active incidents
+      fetch("/api/driver/incidents/active", {
+        headers: {
+          Authorization: "Bearer " + getToken(),
+        },
+      })
+        .then((response) => {
+          if (!response.ok) {
+            throw new Error("Failed to fetch active incidents");
+          }
+          return response.json();
+        })
+        .then((data) => {
+          if (data && data.length > 0) {
+            handleActiveIncidents(data);
+          }
+        })
+        .catch((error) => {
+          console.error("Error checking active incidents:", error);
+        });
+    }
+  }, 500);
+});
+
+
+
+  // Function to accept assistance request
+function acceptAssistanceRequest(transferId) {
+  if (!transferId) {
+    console.error("No transfer ID provided");
+    showToast("Cannot accept request: Missing ID", "danger");
+    return;
+  }
+
+  if (
+    !confirm(
+      "Are you sure you want to help with this route? This will add additional stops to your current route."
+    )
+  ) {
+    return;
+  }
+
+  // Get button and disable it
+  const button = document.querySelector(`[data-transfer-id="${transferId}"]`) || 
+                document.querySelector(`.assistance-card[data-transfer-id="${transferId}"] .accept-assistance-btn`);
+  
+  if (button) {
+    button.disabled = true;
+    button.innerHTML =
+      '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Accepting...';
+  }
+
+  fetch(`/api/driver/transfers/${transferId}/accept`, {
+    method: "POST",
+    headers: {
+      Authorization: "Bearer " + getToken(),
+    },
+  })
+    .then((response) => {
+      if (!response.ok) {
+        throw new Error("Failed to accept transfer");
+      }
+      return response.json();
+    })
+    .then((data) => {
+      // Hide modal
+      const assistanceModal = document.getElementById("assistanceRequestsModal");
+      if (assistanceModal) {
+        const modal = bootstrap.Modal.getInstance(assistanceModal);
+        if (modal) modal.hide();
+      }
+
+      // Show success message
+      showToast(
+        `You've accepted assistance request. Refreshing route data...`,
+        "success"
+      );
+
+      // Remove the assistance badge
+      const badge = document.querySelector(".assistance-badge");
+      if (badge) {
+        badge.remove();
+      }
+
+      // Reload route data to get new stops
+      setTimeout(() => {
+        // If we're on the driver dashboard, refresh the routes
+        if (window.location.pathname.includes("/driver/dashboard")) {
+          loadDriverRoutes();
+        } 
+        // If we're on a route page, reload the route data
+        else if (window.location.pathname.includes("/driver/route/")) {
+          loadRouteData();
+        }
+      }, 1500);
+    })
+    .catch((error) => {
+      console.error("Error accepting assistance request:", error);
+      showToast("Failed to accept assistance request", "danger");
+
+      // Re-enable button
+      if (button) {
+        button.disabled = false;
+        button.innerHTML = '<i class="fas fa-check me-1"></i>I Can Help';
+      }
+    });
+}
+
+  // Initialize when DOM is loaded
+  document.addEventListener("DOMContentLoaded", function () {
+    // Setup logout button
+    document
+      .getElementById("logout-btn")
+      .addEventListener("click", handleLogout);
+
+    // Check if user is logged in
+    if (!getToken()) {
+      window.location.href = "/driver/login";
+      return;
+    }
+
+    // Load driver profile and routes
+    loadDriverProfile();
+
+    // Check for assistance requests
+    checkAssistanceRequests();
+
+    // Refresh data periodically
+    setInterval(() => {
+      loadDriverRoutes();
+      checkAssistanceRequests();
+    }, 60000); // Every minute
+  });
 </script>
 {% endblock %}

@@ -229,19 +229,7 @@
             <div class="mb-3">
                 <label class="form-label">Vehicle Selection</label>
                 <div class="vehicle-list">
-                    {% for i in range(1) %}
-                    <div class="vehicle-item mb-2">
-                        <div class="input-group">
-                            <span class="input-group-text">Vehicle {{ i+1 }}</span>
-                            <select class="form-select vehicle-type-select" name="vehicle_type_{{ i }}">
-                                <option value="van" selected>Delivery Van</option>
-                                <option value="car">Car</option>
-                                <option value="truck">Truck</option>
-                                <option value="motorbike">Motorbike</option>
-                            </select>
-                        </div>
-                    </div>
-                    {% endfor %}
+                    <!-- Vehicle selection items will be dynamically added here by JavaScript -->
                 </div>
             </div>
 
@@ -458,167 +446,163 @@
       document.body.removeChild(link);
   }
 
-  // UPDATED: Function to update fuel estimates
-  window.updateFuelEstimates = function() {
-      const vehicleCount = parseInt(document.getElementById('vehicle_count').value) || 1;
-      const maxDistance = parseFloat(document.getElementById('max_distance').value) || 100;
-      const optimization = document.getElementById('optimization_objective').value;
-      
-      // Get selected vehicle types
-      const vehicleTypes = [];
-      document.querySelectorAll('.vehicle-type-select').forEach(select => {
-          vehicleTypes.push(select.value);
-      });
-      
-      // Base fuel consumption per vehicle type (L/100km)
-      const fuelRates = {
-          'car': 7,
-          'van': 10,
-          'truck': 20,
-          'motorbike': 4
-      };
-      
-      // Calculate estimated total distance
-      let estimatedDistance = maxDistance * vehicleCount;
-      
-      // Calculate estimated fuel consumption
-      let totalFuel = 0;
-      vehicleTypes.forEach((type, index) => {
-          if (index < vehicleCount) { // Only count up to vehicleCount
-              const rate = fuelRates[type] || 10;
-              totalFuel += (maxDistance * rate / 100);
-          }
-      });
-      
-      // Calculate fuel savings
-      let fuelSavings = 0;
-      if (optimization === 'fuel') {
-          fuelSavings = totalFuel * 0.2; // 20% savings with fuel optimization
-      } else if (optimization === 'balanced') {
-          fuelSavings = totalFuel * 0.1; // 10% savings with balanced optimization
-      } else {
-          fuelSavings = totalFuel * 0.05; // 5% savings with time optimization
-      }
-      
-      // Calculate CO2 savings (2.68 kg CO2 per liter of diesel)
-      const co2Savings = fuelSavings * 2.68;
-      
-      // Update the UI
-      document.getElementById('estimated-distance').textContent = estimatedDistance.toFixed(1) + ' km';
-      document.getElementById('estimated-fuel').textContent = fuelSavings.toFixed(1) + ' L';
-      document.getElementById('estimated-co2').textContent = co2Savings.toFixed(1) + ' kg';
-      
-      // Update progress bar (max 20% savings)
-      const savingsPercent = (fuelSavings / totalFuel) * 100;
-      document.querySelector('.progress-bar').style.width = savingsPercent + '%';
-  };
-
-  // UPDATED: Function to update vehicle selection based on count
+  // Function to update vehicle selection based on count
   function updateVehicleSelection() {
-      const count = parseInt(document.getElementById('vehicle_count').value) || 1;
-      const vehicleList = document.querySelector('.vehicle-list');
-      
-      // Clear existing vehicle items
-      vehicleList.innerHTML = '';
-      
-      // Create new vehicle items
-      for (let i = 0; i < count; i++) {
-          const vehicleItem = document.createElement('div');
-          vehicleItem.className = 'vehicle-item mb-2';
-          vehicleItem.innerHTML = `
-              <div class="input-group">
-                  <span class="input-group-text">Vehicle ${i+1}</span>
-                  <select class="form-select vehicle-type-select" name="vehicle_type_${i}">
-                      <option value="van" selected>Delivery Van</option>
-                      <option value="car">Car</option>
-                      <option value="truck">Truck</option>
-                      <option value="motorbike">Motorbike</option>
-                  </select>
-              </div>
-          `;
-          vehicleList.appendChild(vehicleItem);
-      }
-      
-      // Add event listeners to new selects
-      addVehicleSelectListeners();
-      
-      // Update estimates after changing vehicle count
-      updateFuelEstimates();
-      
-      // Update hidden field with the count value
-      updateVehicleCountField(count);
+    const count = parseInt(document.getElementById('vehicle_count').value) || 1;
+    const vehicleList = document.querySelector('.vehicle-list');
+    
+    // Clear existing vehicle items
+    vehicleList.innerHTML = '';
+    
+    // Create new vehicle items
+    for (let i = 0; i < count; i++) {
+      const vehicleItem = document.createElement('div');
+      vehicleItem.className = 'vehicle-item mb-2';
+      vehicleItem.innerHTML = `
+        <div class="input-group">
+          <span class="input-group-text">Vehicle ${i+1}</span>
+          <select class="form-select vehicle-type-select" name="vehicle_type_${i}" id="vehicle_type_${i}">
+            <option value="van" selected>Delivery Van</option>
+            <option value="car">Car</option>
+            <option value="truck">Truck</option>
+            <option value="motorbike">Motorbike</option>
+          </select>
+        </div>
+      `;
+      vehicleList.appendChild(vehicleItem);
+    }
+    
+    // Add event listeners to new selects
+    addVehicleSelectListeners();
+    
+    // Update estimates after changing vehicle count
+    updateFuelEstimates();
   }
 
-  // UPDATED: Function to update the vehicle count field
-  function updateVehicleCountField(count) {
-      // This ensures the count is properly passed in the form submission
-      let hiddenField = document.getElementById('vehicle_count_hidden');
-      if (!hiddenField) {
-          // Create hidden field if it doesn't exist
-          hiddenField = document.createElement('input');
-          hiddenField.type = 'hidden';
-          hiddenField.name = 'vehicle_count';
-          hiddenField.id = 'vehicle_count_hidden';
-          document.getElementById('optimize-form').appendChild(hiddenField);
+  // Function to update fuel estimates
+  function updateFuelEstimates() {
+    const vehicleCount = parseInt(document.getElementById('vehicle_count').value) || 1;
+    const maxDistance = parseFloat(document.getElementById('max_distance').value) || 100;
+    const optimization = document.getElementById('optimization_objective').value;
+    
+    // Get selected vehicle types
+    const vehicleTypes = [];
+    document.querySelectorAll('.vehicle-type-select').forEach(select => {
+      vehicleTypes.push(select.value);
+    });
+    
+    // Base fuel consumption per vehicle type (L/100km)
+    const fuelRates = {
+      'car': 7,
+      'van': 10,
+      'truck': 20,
+      'motorbike': 4
+    };
+    
+    // Calculate estimated total distance
+    let estimatedDistance = maxDistance * vehicleCount;
+    
+    // Calculate estimated fuel consumption
+    let totalFuel = 0;
+    vehicleTypes.forEach((type, index) => {
+      if (index < vehicleCount) { // Only count up to vehicleCount
+        const rate = fuelRates[type] || 10;
+        totalFuel += (maxDistance * rate / 100);
       }
-      hiddenField.value = count;
+    });
+    
+    // Calculate fuel savings
+    let fuelSavings = 0;
+    if (optimization === 'fuel') {
+      fuelSavings = totalFuel * 0.2; // 20% savings with fuel optimization
+    } else if (optimization === 'balanced') {
+      fuelSavings = totalFuel * 0.1; // 10% savings with balanced optimization
+    } else {
+      fuelSavings = totalFuel * 0.05; // 5% savings with time optimization
+    }
+    
+    // Calculate CO2 savings (2.68 kg CO2 per liter of diesel)
+    const co2Savings = fuelSavings * 2.68;
+    
+    // Update the UI
+    document.getElementById('estimated-distance').textContent = estimatedDistance.toFixed(1) + ' km';
+    document.getElementById('estimated-fuel').textContent = fuelSavings.toFixed(1) + ' L';
+    document.getElementById('estimated-co2').textContent = co2Savings.toFixed(1) + ' kg';
+    
+    // Update progress bar (max 20% savings)
+    const savingsPercent = (fuelSavings / totalFuel) * 100;
+    document.querySelector('.progress-bar').style.width = savingsPercent + '%';
   }
 
-  // UPDATED: Function to add event listeners to vehicle type selects
+  // Function to add event listeners to vehicle type selects
   function addVehicleSelectListeners() {
-      document.querySelectorAll('.vehicle-type-select').forEach(select => {
-          select.removeEventListener('change', window.updateFuelEstimates);
-          select.addEventListener('change', window.updateFuelEstimates);
-      });
+    document.querySelectorAll('.vehicle-type-select').forEach(select => {
+      // Remove existing listeners to prevent duplicates
+      select.removeEventListener('change', updateFuelEstimates);
+      // Add new listener
+      select.addEventListener('change', updateFuelEstimates);
+    });
   }
 
-  // UPDATED: Initialize when DOM is loaded
-  document.addEventListener('DOMContentLoaded', function() {
-      // Add event listeners to form fields
-      const vehicleCountInput = document.getElementById('vehicle_count');
-      const optimizationSelect = document.getElementById('optimization_objective');
-      const maxDistanceInput = document.getElementById('max_distance');
-      
-      if (vehicleCountInput) {
-          // Update vehicle selection whenever the count changes
-          vehicleCountInput.addEventListener('change', function() {
-              updateVehicleSelection();
-          });
-          
-          // Ensure the count is properly set as a number, not a string
-          vehicleCountInput.addEventListener('input', function() {
-              // Ensure value is at least 1
-              if (parseInt(this.value) < 1) {
-                  this.value = 1;
-              }
-              // Update hidden field with the same value to ensure it's submitted
-              updateVehicleCountField(this.value);
-          });
-      }
-      
-      if (optimizationSelect) {
-          optimizationSelect.addEventListener('change', window.updateFuelEstimates);
-      }
-      
-      if (maxDistanceInput) {
-          maxDistanceInput.addEventListener('input', window.updateFuelEstimates);
-      }
-      
-      // Add listeners to initial vehicle selects
-      addVehicleSelectListeners();
-      
-      // Initialize estimates
-      window.updateFuelEstimates();
-      
-      // Initialize vehicle selection based on current count
+  // Function to prepare form data before submission
+  function prepareFormSubmission(e) {
+    // Get the vehicle count
+    const vehicleCount = parseInt(document.getElementById('vehicle_count').value) || 1;
+    
+    // Make sure we have the right number of vehicle types
+    const vehicleTypes = document.querySelectorAll('.vehicle-type-select');
+    if (vehicleTypes.length !== vehicleCount) {
+      // Update vehicle selection to match count
       updateVehicleSelection();
-      
-      // Make sure form submission includes correct vehicle count
-      document.getElementById('optimize-form').addEventListener('submit', function(e) {
-          // Update hidden field one last time before submission
-          const count = parseInt(document.getElementById('vehicle_count').value) || 1;
-          updateVehicleCountField(count);
+    }
+    
+    console.log("Form submitting with vehicle count:", vehicleCount);
+    console.log("Optimization objective:", document.getElementById('optimization_objective').value);
+  }
+
+  // Initialize when DOM is loaded
+  document.addEventListener('DOMContentLoaded', function() {
+    // Add event listeners to form fields
+    const vehicleCountInput = document.getElementById('vehicle_count');
+    const optimizationSelect = document.getElementById('optimization_objective');
+    const maxDistanceInput = document.getElementById('max_distance');
+    const optimizeForm = document.getElementById('optimize-form');
+    
+    if (vehicleCountInput) {
+      // Update vehicle selection whenever the count changes
+      vehicleCountInput.addEventListener('change', function() {
+        updateVehicleSelection();
       });
+      
+      // Ensure the count is properly set as a number, not a string
+      vehicleCountInput.addEventListener('input', function() {
+        // Ensure value is at least 1
+        if (parseInt(this.value) < 1) {
+          this.value = 1;
+        }
+      });
+    }
+    
+    if (optimizationSelect) {
+      optimizationSelect.addEventListener('change', updateFuelEstimates);
+    }
+    
+    if (maxDistanceInput) {
+      maxDistanceInput.addEventListener('input', updateFuelEstimates);
+    }
+    
+    if (optimizeForm) {
+      optimizeForm.addEventListener('submit', prepareFormSubmission);
+    }
+    
+    // Add listeners to initial vehicle selects
+    addVehicleSelectListeners();
+    
+    // Initialize estimates
+    updateFuelEstimates();
+    
+    // Initialize vehicle selection based on current count
+    updateVehicleSelection();
   });
 </script>
 {% endblock %}

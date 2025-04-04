@@ -40,6 +40,11 @@ def optimize_routes_fuel_efficient(depot, locations, distance_matrix, vehicle_da
     # Initialize fuel consumption predictor
     fuel_predictor = FuelConsumptionPredictor()
     
+    # Log the optimization parameters for debugging
+    logger.info(f"Starting route optimization with objective: {optimization_objective}")
+    logger.info(f"Vehicle count: {vehicle_count}")
+    logger.info(f"Vehicle data: {[v.get('type', 'unknown') for v in vehicle_data[:vehicle_count]]}")
+    
     # Ensure there are enough vehicles in vehicle_data
     if not vehicle_data or len(vehicle_data) < vehicle_count:
         # Create default vehicle data if not provided
@@ -148,25 +153,36 @@ def optimize_routes_fuel_efficient(depot, locations, distance_matrix, vehicle_da
     
     # Set the cost function based on optimization objective
     if optimization_objective == 'time':
+        logger.info("Using TIME as the primary optimization objective")
         routing.SetArcCostEvaluatorOfAllVehicles(time_callback_index)
     elif optimization_objective == 'fuel':
+        logger.info("Using FUEL as the primary optimization objective")
         routing.SetArcCostEvaluatorOfAllVehicles(fuel_callback_index)
-    else:  # balanced
+    else:  # balanced (default)
+        logger.info("Using BALANCED optimization (time and fuel)")
         # Create a combined cost function that balances time and fuel
         def combined_callback(from_index, to_index):
             from_node = manager.IndexToNode(from_index)
             to_node = manager.IndexToNode(to_index)
             
-            # Normalize time and fuel to similar scales and combine
+            # Normalize time and fuel to similar scales
             time_cost = travel_time_matrix[from_node][to_node] * 3600  # seconds
             fuel_cost = fuel_matrix[from_node][to_node] * 1000  # milliliters
+            
+            # Calculate typical values to normalize
+            avg_time = 1800  # 30 minutes in seconds
+            avg_fuel = 2000  # 2 liters in milliliters
+            
+            # Normalize to make both factors comparable
+            normalized_time = time_cost / avg_time
+            normalized_fuel = fuel_cost / avg_fuel
             
             # Weight time vs. fuel (adjust these weights to change the balance)
             time_weight = 0.5
             fuel_weight = 0.5
             
             # Return weighted combination
-            return int(time_weight * time_cost + fuel_weight * fuel_cost)
+            return int((time_weight * normalized_time + fuel_weight * normalized_fuel) * 10000)
         
         combined_callback_index = routing.RegisterTransitCallback(combined_callback)
         routing.SetArcCostEvaluatorOfAllVehicles(combined_callback_index)

@@ -17,7 +17,8 @@ from models.traffic_data import get_overpass_traffic_data
 from models.fuel_efficient_optimizer import optimize_routes_fuel_efficient
 from models.vehicle_model import get_vehicle_efficiency_data, calculate_co2_emissions
 from models.db_setup import db
-
+from models.fuel_efficient_optimizer import optimize_routes_fuel_efficient
+from models.vehicle_model import get_vehicle_efficiency_data, calculate_co2_emissions
 
 data_dir = os.path.join(os.path.dirname(__file__), 'data')
 if not os.path.exists(data_dir):
@@ -233,6 +234,7 @@ class DeliveryStop(db.Model):
     signature_image = db.Column(db.String(255), nullable=True)  # Path to signature image file
     proof_of_delivery = db.Column(db.String(255), nullable=True)  # Path to proof of delivery image
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    original_stop_id = db.Column(db.Integer, nullable=True)
     
     # Relationships
     driver_route = db.relationship('DriverRoute', back_populates='delivery_stops')
@@ -1147,142 +1149,186 @@ def delivery_proof(current_driver, filename):
     return send_from_directory(os.path.join(app.root_path, 'static', 'proofs'), filename)
 
 
-# Add these imports to the top of app.py
-from models.fuel_efficient_optimizer import optimize_routes_fuel_efficient
-from models.vehicle_model import get_vehicle_efficiency_data, calculate_co2_emissions
-
 # Add this new route to app.py
 @app.route('/optimize_route_fuel_efficient', methods=['POST'])
 def optimize_route_fuel_efficient():
     """
     Optimize delivery routes with emphasis on fuel efficiency.
     """
-    # Get form data
-    depot_id = request.form.get('depot_id', type=int)
-    vehicle_count = request.form.get('vehicle_count', type=int, default=1)
-    max_distance = request.form.get('max_distance', type=float, default=None)
-    optimization_objective = request.form.get('optimization_objective', default='balanced')
-    
-    # Optional parameters for vehicle selection
-    vehicle_ids = request.form.getlist('vehicle_ids')
-    
-    # Get all locations
-    locations = Location.query.all()
-    
-    # Find depot location
-    depot = None
-    delivery_locations = []
-    
-    for loc in locations:
-        if loc.id == depot_id:
-            depot = {
-                'id': loc.id,
-                'name': loc.name,
-                'latitude': loc.latitude,
-                'longitude': loc.longitude
-            }
-        else:
-            delivery_locations.append({
-                'id': loc.id,
-                'name': loc.name,
-                'latitude': loc.latitude,
-                'longitude': loc.longitude,
-                'time_window_start': loc.time_window_start.strftime('%H:%M') if loc.time_window_start else None,
-                'time_window_end': loc.time_window_end.strftime('%H:%M') if loc.time_window_end else None
-            })
-    
-    if not depot:
-        return "Depot location not found", 400
-    
-    # Calculate distance matrix
-    coordinates = [{'lat': loc['latitude'], 'lng': loc['longitude']} for loc in [depot] + delivery_locations]
-    distance_matrix = calculate_distance_matrix(coordinates)
-    
-    # Get traffic data if enabled
-    use_traffic = request.form.get('use_traffic', default='on') == 'on'
-    traffic_data = None
-    
-    if use_traffic:
-        # Get bounds from coordinates
-        min_lat = min(coord['lat'] for coord in coordinates)
-        min_lon = min(coord['lng'] for coord in coordinates)
-        max_lat = max(coord['lat'] for coord in coordinates)
-        max_lon = max(coord['lng'] for coord in coordinates)
+    # Extract vehicle count with robust handling for different submission methods
+    try:
+        # Try multiple ways to get the vehicle count
+        vehicle_count = None
         
-        bounds = (min_lat, min_lon, max_lat, max_lon)
-        traffic_data = get_overpass_traffic_data(bounds)
+        # First try the standard form field
+        if 'vehicle_count' in request.form:
+            vehicle_count = int(request.form['vehicle_count'])
+        
+        # If that fails, try to count vehicle_type_ parameters
+        if vehicle_count is None or vehicle_count < 1:
+            vehicle_count = 0
+            for key in request.form:
+                if key.startswith('vehicle_type_'):
+                    try:
+                        index = int(key.split('_')[-1])
+                        vehicle_count = max(vehicle_count, index + 1)
+                    except ValueError:
+                        pass
+        
+        # Set a reasonable default if we still don't have a valid count
+        if vehicle_count is None or vehicle_count < 1:
+            vehicle_count = 1
+        
+        print(f"Detected vehicle count: {vehicle_count}")
+        
+    except Exception as e:
+        print(f"Error determining vehicle count: {e}")
+        vehicle_count = 1
     
-    # Get vehicle data
-    vehicle_data = []
-    
-    if vehicle_ids:
-        # If specific vehicles are selected, use their data
-        for v_id in vehicle_ids:
-            vehicle_data.append(get_vehicle_efficiency_data(vehicle_id=int(v_id), db=db))
-    else:
-        # Otherwise use default vehicles
+    # Get form data
+    try:
+        depot_id = request.form.get('depot_id', type=int)
+        max_distance = request.form.get('max_distance', type=float, default=None)
+        optimization_objective = request.form.get('optimization_objective', default='balanced')
+        
+        # Validate inputs
+        if not depot_id:
+            return "Depot location not found", 400
+            
+        print(f"Processing optimization with {vehicle_count} vehicles and '{optimization_objective}' objective")
+        
+        # Optional parameters for vehicle selection
+        vehicle_types = []
         for i in range(vehicle_count):
             vehicle_type = request.form.get(f'vehicle_type_{i}', default='van')
+            vehicle_types.append(vehicle_type)
+            print(f"Vehicle {i}: Type = {vehicle_type}")
+        
+        # Get all locations
+        locations = Location.query.all()
+        
+        # Find depot location
+        depot = None
+        delivery_locations = []
+        
+        for loc in locations:
+            if loc.id == depot_id:
+                depot = {
+                    'id': loc.id,
+                    'name': loc.name,
+                    'latitude': loc.latitude,
+                    'longitude': loc.longitude
+                }
+            else:
+                delivery_locations.append({
+                    'id': loc.id,
+                    'name': loc.name,
+                    'latitude': loc.latitude,
+                    'longitude': loc.longitude,
+                    'time_window_start': loc.time_window_start.strftime('%H:%M') if loc.time_window_start else None,
+                    'time_window_end': loc.time_window_end.strftime('%H:%M') if loc.time_window_end else None
+                })
+        
+        if not depot:
+            return "Depot location not found", 400
+        
+        # Calculate distance matrix
+        coordinates = [{'lat': loc['latitude'], 'lng': loc['longitude']} for loc in [depot] + delivery_locations]
+        distance_matrix = calculate_distance_matrix(coordinates)
+        
+        # Get traffic data if enabled
+        use_traffic = request.form.get('use_traffic', default='on') == 'on'
+        traffic_data = None
+        
+        if use_traffic:
+            # Get bounds from coordinates
+            min_lat = min(coord['lat'] for coord in coordinates)
+            min_lon = min(coord['lng'] for coord in coordinates)
+            max_lat = max(coord['lat'] for coord in coordinates)
+            max_lon = max(coord['lng'] for coord in coordinates)
+            
+            bounds = (min_lat, min_lon, max_lat, max_lon)
+            traffic_data = get_overpass_traffic_data(bounds)
+        
+        # Get vehicle data based on selected types
+        vehicle_data = []
+        for i in range(vehicle_count):
+            vehicle_type = vehicle_types[i] if i < len(vehicle_types) else 'van'
             vehicle_data.append(get_vehicle_efficiency_data(vehicle_type=vehicle_type))
-    
-    # Optional: Cluster locations if there are multiple vehicles
-    clusters = None
-    if vehicle_count > 1:
-        clusters = cluster_locations([depot] + delivery_locations, vehicle_count)
-    
-    # Optimize routes with fuel efficiency
-    routes = optimize_routes_fuel_efficient(
-        depot=depot,
-        locations=delivery_locations,
-        distance_matrix=distance_matrix,
-        vehicle_data=vehicle_data,
-        traffic_data=traffic_data,
-        vehicle_count=vehicle_count,
-        max_distance=max_distance,
-        clusters=clusters,
-        optimization_objective=optimization_objective
-    )
-    
-    # Calculate total metrics
-    total_distance = sum(route['total_distance'] for route in routes)
-    total_time = sum(route['total_time'] for route in routes)
-    total_fuel = sum(route['total_fuel'] for route in routes)
-    total_fuel_saved = sum(route['fuel_saved'] for route in routes)
-    
-    # Calculate CO2 savings
-    co2_saved = calculate_co2_emissions(total_fuel_saved)
-    
-    # Generate a formatted route name
-    route_name = f"Fuel-Efficient Route {datetime.now().strftime('%Y-%m-%d %H:%M')}"
-    
-    # Save route to database
-    new_route = Route(
-        name=route_name,
-        total_distance=total_distance,
-        total_time=total_time,
-        route_data=json.dumps(routes),
-        traffic_data=json.dumps(traffic_data) if traffic_data else "{}"
-    )
-    
-    # Add fuel information to route (may need to extend your Route model)
-    new_route.total_fuel = total_fuel
-    new_route.fuel_saved = total_fuel_saved
-    new_route.co2_saved = co2_saved
-    
-    db.session.add(new_route)
-    db.session.commit()
+        
+        # Optional: Cluster locations if there are multiple vehicles
+        clusters = None
+        if vehicle_count > 1:
+            clusters = cluster_locations([depot] + delivery_locations, vehicle_count)
+        
+        # Log important parameters before optimization
+        print(f"Optimization parameters:")
+        print(f"- Vehicle count: {vehicle_count}")
+        print(f"- Vehicle types: {vehicle_types}")
+        print(f"- Optimization objective: {optimization_objective}")
+        print(f"- Traffic enabled: {use_traffic}")
+        print(f"- Max distance: {max_distance}")
+        
+        # Optimize routes with fuel efficiency
+        routes = optimize_routes_fuel_efficient(
+            depot=depot,
+            locations=delivery_locations,
+            distance_matrix=distance_matrix,
+            vehicle_data=vehicle_data,
+            traffic_data=traffic_data,
+            vehicle_count=vehicle_count,
+            max_distance=max_distance,
+            clusters=clusters,
+            optimization_objective=optimization_objective
+        )
+        
+        # Calculate total metrics
+        total_distance = sum(route['total_distance'] for route in routes)
+        total_time = sum(route['total_time'] for route in routes)
+        total_fuel = sum(route['total_fuel'] for route in routes)
+        total_fuel_saved = sum(route['fuel_saved'] for route in routes)
+        
+        # Calculate CO2 savings
+        co2_saved = calculate_co2_emissions(total_fuel_saved)
+        
+        # Generate a formatted route name
+        route_name = f"Fuel-Efficient Route {datetime.now().strftime('%Y-%m-%d %H:%M')}"
+        
+        # Save route to database
+        new_route = Route(
+            name=route_name,
+            total_distance=total_distance,
+            total_time=total_time,
+            route_data=json.dumps(routes),
+            traffic_data=json.dumps(traffic_data) if traffic_data else "{}",
+            total_fuel=total_fuel,
+            fuel_saved=total_fuel_saved,
+            co2_saved=co2_saved,
+            optimization_type=optimization_objective
+        )
+        
+        db.session.add(new_route)
+        db.session.commit()
 
-    print("FUEL-EFFICIENT ROUTE DATA:", routes)
-    for route in routes:
-        print(f"Vehicle {route['vehicle_id']} ({route['vehicle_type']}) has {len(route['stops'])} stops")
-        print(f"  - Total Distance: {route['total_distance']:.2f} km")
-        print(f"  - Total Time: {route['total_time']:.2f} hours")
-        print(f"  - Total Fuel: {route['total_fuel']:.2f} liters")
-        print(f"  - Fuel Saved: {route['fuel_saved']:.2f} liters")
-        print(f"  - Cost Saved: ${route['cost_saved']:.2f}")
+        print("FUEL-EFFICIENT ROUTE DATA:", routes)
+        for route in routes:
+            print(f"Vehicle {route['vehicle_id']} ({route['vehicle_type']}) has {len(route['stops'])} stops")
+            print(f"  - Total Distance: {route['total_distance']:.2f} km")
+            print(f"  - Total Time: {route['total_time']:.2f} hours")
+            print(f"  - Total Fuel: {route['total_fuel']:.2f} liters")
+            print(f"  - Fuel Saved: {route['fuel_saved']:.2f} liters")
+            if 'cost_saved' in route:
+                print(f"  - Cost Saved: ${route['cost_saved']:.2f}")
+        
+        # Redirect to the route details page
+        return redirect(url_for('view_route', route_id=new_route.id))
+        
+    except Exception as e:
+        print(f"Error in optimize_route_fuel_efficient: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return f"An error occurred: {str(e)}", 500
     
-    # Redirect to the route details page
-    return redirect(url_for('view_route', route_id=new_route.id))
 
 # Add this endpoint to your app.py file
 
@@ -1711,12 +1757,15 @@ def accept_transfer(current_driver, transfer_id):
     }), 200
 
 # Get pending incident status (for original driver)
+
 @app.route('/api/driver/incidents/active', methods=['GET'])
 @token_required
 def get_active_incidents(current_driver):
+    # Fix the SQL query error by using filter() with in_() instead of status__in
     active_incidents = RouteIncident.query.filter_by(
-        driver_id=current_driver.id,
-        status='reported'
+        driver_id=current_driver.id
+    ).filter(
+        RouteIncident.status.in_(['reported', 'assistance_assigned'])
     ).order_by(RouteIncident.reported_at.desc()).all()
     
     incident_data = []
@@ -1731,10 +1780,25 @@ def get_active_incidents(current_driver):
         for transfer in transfers:
             if transfer.transfer_status == 'accepted':
                 transfer_status = 'accepted'
+                
+                # Get new driver information
+                new_driver = None
+                if transfer.new_driver_id:
+                    new_driver = Driver.query.get(transfer.new_driver_id)
+                
+                # Calculate how many stops were transferred
+                stop_count = 0
+                if transfer.stop_ids:
+                    try:
+                        stop_count = len(json.loads(transfer.stop_ids))
+                    except:
+                        pass
+                
+                # Add helper info
                 helper_info = {
-                    'driver_name': f"{transfer.new_driver.first_name} {transfer.new_driver.last_name}",
-                    'vehicle': transfer.new_driver.vehicle.name if transfer.new_driver.vehicle else None,
-                    'stops_count': len(transfer.stop_id_list),
+                    'driver_name': f"{new_driver.first_name} {new_driver.last_name}" if new_driver else "Another driver",
+                    'vehicle': new_driver.vehicle.name if new_driver and new_driver.vehicle else None,
+                    'stops_count': stop_count,
                     'accepted_at': transfer.transfer_accepted_at.isoformat() if transfer.transfer_accepted_at else None
                 }
                 break
@@ -2071,6 +2135,45 @@ def update_driver_location(current_driver):
         }
     }), 200
 
+
+# Add this route to app.py
+@app.route('/api/driver/route/acknowledge_transfer/<int:route_id>', methods=['POST'])
+@token_required
+def acknowledge_route_transfer(current_driver, route_id):
+    """
+    Mark a route as acknowledged when it's been transferred to another driver.
+    This updates the route status to 'transferred' to reflect the change.
+    """
+    # Find the driver route
+    driver_route = DriverRoute.query.filter_by(
+        id=route_id, 
+        driver_id=current_driver.id
+    ).first()
+    
+    if not driver_route:
+        return jsonify({'message': 'Route not found'}), 404
+    
+    # Update status if not already marked as transferred
+    if driver_route.status != 'transferred':
+        driver_route.status = 'transferred'
+        
+        # Update any active incidents related to this route
+        incidents = RouteIncident.query.filter_by(
+            driver_id=current_driver.id, 
+            driver_route_id=route_id,
+            status='assistance_assigned'
+        ).all()
+        
+        for incident in incidents:
+            incident.status = 'resolved'
+            incident.resolved_at = datetime.utcnow()
+        
+        db.session.commit()
+    
+    return jsonify({
+        'message': 'Route transfer acknowledged',
+        'driver_route': driver_route.to_dict()
+    }), 200
 
 
 if __name__ == '__main__':

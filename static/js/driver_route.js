@@ -14,6 +14,7 @@ document.addEventListener("DOMContentLoaded", function () {
   let pendingStops = [];
   let activeIncident = null;
   let incidentCheckInterval = null;
+  let helpDialogDismissed = false;
 
   // Extract route ID from URL
   const pathSegments = window.location.pathname.split("/");
@@ -1242,6 +1243,72 @@ document.addEventListener("DOMContentLoaded", function () {
   }
 
   // Check active incidents
+  // Function to check for active incidents
+
+  // Helper function to update emergency button
+  function updateEmergencyButton() {
+    const emergencyBtn = document.getElementById("emergency-btn");
+    if (!emergencyBtn) return;
+
+    if (
+      activeIncident &&
+      (activeIncident.status === "assistance_assigned" ||
+        activeIncident.help_status === "accepted")
+    ) {
+      // Check if the incident has been acknowledged
+      const incidentAcknowledged =
+        localStorage.getItem(`incident_${activeIncident.id}_acknowledged`) ===
+        "true";
+
+      if (incidentAcknowledged) {
+        // Show a less prominent indicator if acknowledged
+        emergencyBtn.classList.remove("btn-danger", "btn-success");
+        emergencyBtn.classList.add("btn-outline-success");
+        emergencyBtn.innerHTML =
+          '<i class="fas fa-check-circle me-1"></i>Help on the way';
+        emergencyBtn.disabled = false;
+
+        // Add click handler to show the modal again if needed
+        emergencyBtn.onclick = function (e) {
+          e.preventDefault();
+          e.stopPropagation();
+
+          // Reset dismissed flag to allow showing the modal
+          helpDialogDismissed = false;
+
+          // Update and show the help status modal
+          updateHelpStatusUI();
+
+          // Don't trigger the default data-bs-toggle behavior
+          return false;
+        };
+      } else {
+        // Show the normal "Help Assigned" button
+        emergencyBtn.classList.remove("btn-danger", "btn-outline-success");
+        emergencyBtn.classList.add("btn-success");
+        emergencyBtn.innerHTML =
+          '<i class="fas fa-check-circle me-1"></i>Help Assigned';
+        emergencyBtn.disabled = true;
+      }
+    }
+  }
+
+  // Helper function to reset emergency button to default state
+  function resetEmergencyButton() {
+    const emergencyBtn = document.getElementById("emergency-btn");
+    if (!emergencyBtn) return;
+
+    // Reset to default state
+    emergencyBtn.classList.remove("btn-success", "btn-outline-success");
+    emergencyBtn.classList.add("btn-danger");
+    emergencyBtn.innerHTML =
+      '<i class="fas fa-exclamation-triangle me-1"></i>Report Issue';
+    emergencyBtn.disabled = false;
+
+    // Reset to default behavior
+    emergencyBtn.onclick = null;
+  }
+
   function checkActiveIncidents() {
     fetch("/api/driver/incidents/active", {
       headers: {
@@ -1256,14 +1323,89 @@ document.addEventListener("DOMContentLoaded", function () {
       })
       .then((data) => {
         if (data && data.length > 0) {
-          // We have an active incident
+          // Compare with existing active incident to detect changes
+          const prevIncidentStatus = activeIncident
+            ? activeIncident.status
+            : null;
+          const prevHelpStatus = activeIncident
+            ? activeIncident.help_status
+            : null;
+
+          // Update active incident data
           activeIncident = data[0];
 
-          // Show help status modal
-          updateHelpStatusUI();
+          // Check if this incident has been acknowledged
+          const incidentAcknowledged =
+            localStorage.getItem(
+              `incident_${activeIncident.id}_acknowledged`
+            ) === "true";
 
-          // Start checking for help status
+          // If already acknowledged, update UI elements but don't show the modal again
+          if (incidentAcknowledged || helpDialogDismissed) {
+            // Only update UI elements, don't show modal
+            updateEmergencyButton();
+            return;
+          }
+
+          // Check if the status has changed
+          const statusChanged =
+            prevIncidentStatus !== activeIncident.status ||
+            prevHelpStatus !== activeIncident.help_status;
+
+          // Show helper assigned notification if status changed to assistance_assigned
+          if (
+            statusChanged &&
+            (activeIncident.status === "assistance_assigned" ||
+              activeIncident.help_status === "accepted")
+          ) {
+            // Play a sound to alert the driver if available
+            if (typeof Audio !== "undefined") {
+              try {
+                const notificationSound = new Audio(
+                  "/static/sounds/notification.mp3"
+                );
+                notificationSound
+                  .play()
+                  .catch((e) => console.log("Sound play failed:", e));
+              } catch (e) {
+                console.log("Audio not supported");
+              }
+            }
+
+            // Show a toast notification
+            showToast(
+              "Help is on the way! Another driver has been assigned to your remaining stops.",
+              "success"
+            );
+          }
+
+          // Show help status modal if driver has been assigned and modal not dismissed
+          if (!helpDialogDismissed && !incidentAcknowledged) {
+            updateHelpStatusUI();
+          }
+
+          // Start checking for help status updates
           startCheckingHelpStatus();
+        } else {
+          // No active incidents, hide the help status modal if it's open
+          const helpStatusModal = bootstrap.Modal.getInstance(
+            document.getElementById("helpStatusModal")
+          );
+          if (helpStatusModal) {
+            helpStatusModal.hide();
+          }
+
+          // Reset the dismissed flag since there are no active incidents
+          helpDialogDismissed = false;
+
+          // Reset emergency button if needed
+          resetEmergencyButton();
+
+          // Clear active incident
+          activeIncident = null;
+
+          // Stop checking for help status
+          stopCheckingHelpStatus();
         }
       })
       .catch((error) => {
@@ -1272,25 +1414,27 @@ document.addEventListener("DOMContentLoaded", function () {
   }
 
   // Start checking for help status
+
+  // Start checking for help status - improved polling mechanism
   function startCheckingHelpStatus() {
     if (incidentCheckInterval) {
       clearInterval(incidentCheckInterval);
     }
 
     // Check immediately
-    updateHelpStatusUI();
+    checkActiveIncidents();
 
-    // Then check every 10 seconds
+    // Then check every 3 seconds (more frequent to be responsive)
     incidentCheckInterval = setInterval(() => {
-      if (activeIncident) {
+      if (activeIncident && !helpDialogDismissed) {
         checkActiveIncidents();
       } else {
         stopCheckingHelpStatus();
       }
-    }, 10000);
+    }, 3000);
   }
 
-  // Stop checking for help status
+  // Function to stop checking help status
   function stopCheckingHelpStatus() {
     if (incidentCheckInterval) {
       clearInterval(incidentCheckInterval);
@@ -1298,9 +1442,74 @@ document.addEventListener("DOMContentLoaded", function () {
     }
   }
 
-  // Update help status UI
+  // Function to mark incident as acknowledged
+  function acknowledgeIncident(incidentId) {
+    // Set the flag to prevent the dialog from reappearing
+    helpDialogDismissed = true;
+
+    // Mark the incident as acknowledged in local storage
+    localStorage.setItem(`incident_${incidentId}_acknowledged`, "true");
+
+    // Hide the modal
+    const helpStatusModal = bootstrap.Modal.getInstance(
+      document.getElementById("helpStatusModal")
+    );
+    if (helpStatusModal) {
+      helpStatusModal.hide();
+    }
+
+    // Update UI - Change the emergency button to show a less prominent indicator
+    const emergencyBtn = document.getElementById("emergency-btn");
+    if (emergencyBtn) {
+      emergencyBtn.classList.remove("btn-danger");
+      emergencyBtn.classList.add("btn-outline-success");
+      emergencyBtn.innerHTML =
+        '<i class="fas fa-check-circle me-1"></i>Help on the way';
+      emergencyBtn.disabled = false;
+
+      // Add click handler to show the modal again if needed
+      emergencyBtn.onclick = function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+
+        // Show the modal again
+        const modal = new bootstrap.Modal(
+          document.getElementById("helpStatusModal")
+        );
+        modal.show();
+
+        // Don't trigger the default data-bs-toggle behavior
+        return false;
+      };
+    }
+
+    // Redirect to dashboard if requested
+    if (window.location.pathname.includes("/driver/route/")) {
+      // Ask if they want to go to dashboard
+      if (
+        confirm(
+          "Your remaining stops have been assigned to another driver. Go to dashboard?"
+        )
+      ) {
+        window.location.href = "/driver/dashboard";
+      }
+    }
+  }
+
+  // Update help status UI function in driver_route.js
+  // Updated updateHelpStatusUI function to check for dismissed state
   function updateHelpStatusUI() {
     if (!activeIncident) {
+      return;
+    }
+
+    // Check if this incident has been acknowledged
+    const incidentAcknowledged =
+      localStorage.getItem(`incident_${activeIncident.id}_acknowledged`) ===
+      "true";
+
+    // If the driver has dismissed this help dialog, don't show it again automatically
+    if (helpDialogDismissed || incidentAcknowledged) {
       return;
     }
 
@@ -1313,34 +1522,56 @@ document.addEventListener("DOMContentLoaded", function () {
     assignedEl.classList.add("d-none");
     noHelpEl.classList.add("d-none");
 
-    // Show appropriate section
+    // Show appropriate section based on help_status or incident status
     if (
-      activeIncident.help_status === "accepted" &&
-      activeIncident.helper_info
+      activeIncident.status === "assistance_assigned" ||
+      (activeIncident.help_status === "accepted" && activeIncident.helper_info)
     ) {
-      // Help assigned
+      // Help assigned - show the assigned UI
       assignedEl.classList.remove("d-none");
 
       // Update helper info
-      document.getElementById("helperDriverName").textContent =
-        activeIncident.helper_info.driver_name;
-      document.getElementById("helperVehicleInfo").textContent =
-        activeIncident.helper_info.vehicle || "Vehicle info not available";
+      const driverName =
+        activeIncident.helper_info?.driver_name || "Another driver";
+      document.getElementById("helperDriverName").textContent = driverName;
+
+      const vehicleInfo =
+        activeIncident.helper_info?.vehicle || "Vehicle info not available";
+      document.getElementById("helperVehicleInfo").textContent = vehicleInfo;
+
+      const assignedTime = formatDateTime(
+        activeIncident.helper_info?.accepted_at || new Date()
+      );
       document.getElementById("helperAssignedTime").textContent =
-        "Assigned at " + formatDateTime(activeIncident.helper_info.accepted_at);
-      document.getElementById("transferredStopsCount").textContent =
-        activeIncident.helper_info.stops_count;
+        "Assigned at " + assignedTime;
+
+      const stopsCount =
+        activeIncident.helper_info?.stops_count ||
+        pendingStops.length ||
+        "your remaining";
+      document.getElementById("transferredStopsCount").textContent = stopsCount;
 
       // Show help status modal if not already visible
-      const helpStatusModal = new bootstrap.Modal(
-        document.getElementById("helpStatusModal")
-      );
-      helpStatusModal.show();
+      const helpStatusModal = document.getElementById("helpStatusModal");
+      if (!helpStatusModal.classList.contains("show")) {
+        const modal = new bootstrap.Modal(helpStatusModal);
+        modal.show();
+      }
+
+      // Update the emergency button to show "Help Assigned" instead
+      const emergencyBtn = document.getElementById("emergency-btn");
+      if (emergencyBtn) {
+        emergencyBtn.classList.remove("btn-danger");
+        emergencyBtn.classList.add("btn-success");
+        emergencyBtn.innerHTML =
+          '<i class="fas fa-check-circle me-1"></i>Help Assigned';
+        emergencyBtn.disabled = true;
+      }
     } else if (activeIncident.status === "reported") {
       // Still waiting
       waitingEl.classList.remove("d-none");
     } else {
-      // No help available
+      // No help available or other status
       noHelpEl.classList.remove("d-none");
     }
   }
@@ -1602,6 +1833,94 @@ document.addEventListener("DOMContentLoaded", function () {
 
     const date = new Date(dateTimeStr);
     return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  }
+
+  // Add this function to the driver_route.js file
+
+  // Function to acknowledge route transfer
+  function acknowledgeRouteTransfer(routeId) {
+    fetch(`/api/driver/route/acknowledge_transfer/${routeId}`, {
+      method: "POST",
+      headers: {
+        Authorization: "Bearer " + getToken(),
+      },
+    })
+      .then((response) => {
+        if (!response.ok) {
+          throw new Error("Failed to acknowledge route transfer");
+        }
+        return response.json();
+      })
+      .then((data) => {
+        console.log("Route transfer acknowledged:", data);
+
+        // Update route data if needed
+        if (routeData && routeData.driver_route) {
+          routeData.driver_route.status = "transferred";
+        }
+      })
+      .catch((error) => {
+        console.error("Error acknowledging route transfer:", error);
+      });
+  }
+
+  // Update the acknowledgeIncident function to also update route status
+  function acknowledgeIncident(incidentId) {
+    // Set the flag to prevent the dialog from reappearing
+    helpDialogDismissed = true;
+
+    // Mark the incident as acknowledged in local storage
+    localStorage.setItem(`incident_${incidentId}_acknowledged`, "true");
+
+    // Hide the modal
+    const helpStatusModal = bootstrap.Modal.getInstance(
+      document.getElementById("helpStatusModal")
+    );
+    if (helpStatusModal) {
+      helpStatusModal.hide();
+    }
+
+    // Update UI - Change the emergency button to show a less prominent indicator
+    const emergencyBtn = document.getElementById("emergency-btn");
+    if (emergencyBtn) {
+      emergencyBtn.classList.remove("btn-danger");
+      emergencyBtn.classList.add("btn-outline-success");
+      emergencyBtn.innerHTML =
+        '<i class="fas fa-check-circle me-1"></i>Help on the way';
+      emergencyBtn.disabled = false;
+
+      // Add click handler to show the modal again if needed
+      emergencyBtn.onclick = function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+
+        // Show the modal again
+        const modal = new bootstrap.Modal(
+          document.getElementById("helpStatusModal")
+        );
+        modal.show();
+
+        // Don't trigger the default data-bs-toggle behavior
+        return false;
+      };
+    }
+
+    // Also acknowledge the route transfer if we have route data
+    if (routeData && routeData.driver_route) {
+      acknowledgeRouteTransfer(routeData.driver_route.id);
+    }
+
+    // Redirect to dashboard if requested
+    if (window.location.pathname.includes("/driver/route/")) {
+      // Ask if they want to go to dashboard
+      if (
+        confirm(
+          "Your remaining stops have been assigned to another driver. Go to dashboard?"
+        )
+      ) {
+        window.location.href = "/driver/dashboard";
+      }
+    }
   }
 
   // Initialize components
